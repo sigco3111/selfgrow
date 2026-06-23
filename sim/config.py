@@ -61,6 +61,7 @@ ENERGY_COST = {
     "craft": 4.0,
     "reproduce": 25.0,
     "combat": 7.0,
+    "construct": 6.0,
 }
 
 # 배고픔 임계치 (energy/max_energy 비율)
@@ -222,6 +223,64 @@ SMART_SIMILARITY_THRESHOLD = 0.7  # 경험 참조를 위한 상태 유사도 임
 SMART_PLANNING_RATE = 0.3         # 멀티스텝 계획 시도 확률 (매 결정마다)
 SMART_PLANNING_DISCOUNT = 0.6     # 미래 액션 점수 할인율 (0~1, 높을수록 미래 중시)
 SMART_LEARNING_RATE = 0.1         # 경험 보정의 학습률 (너무 높으면 불안정)
+
+
+# ──────────────────────────────────────────────
+# 계절 시스템
+# ──────────────────────────────────────────────
+SEASON_LENGTH = 25  # 한 계절의 틱 수
+SEASON_NAMES = ["spring", "summer", "autumn", "winter"]
+
+# 계절별 효과 배율 [봄, 여름, 가을, 겨울] (기준=1.0)
+SEASON_RESOURCE_REGEN = [1.2, 1.1, 1.0, 0.7]      # 자원 재생률
+SEASON_ENERGY_COST = [1.0, 1.15, 1.0, 1.2]         # 에너지 소비
+SEASON_GATHER_BONUS = [1.0, 1.0, 1.1, 0.9]         # 채집 효율
+SEASON_SPEED_MOD = [1.0, 1.0, 1.0, 0.8]            # 이동 속도
+
+
+# ──────────────────────────────────────────────
+# 랜덤 이벤트 시스템
+# ──────────────────────────────────────────────
+EVENT_BASE_PROBABILITY = 0.02        # 매 틱 이벤트 발생 확률 (2%)
+EVENT_MAX_ACTIVE = 3                  # 동시에 활성화될 수 있는 최대 이벤트 수
+EVENT_MIN_INTERVAL = 10              # 이벤트 간 최소 틱 간격
+
+
+# ──────────────────────────────────────────────
+# 건설 시스템
+# ──────────────────────────────────────────────
+from dataclasses import dataclass, field
+
+
+@dataclass
+class BuildingDef:
+    name: str
+    description: str
+    cost: dict[str, float]
+    effects: dict
+    max_per_entity: int = 1
+    tech_required: str = ""
+
+
+BUILDING_DEFS: list[BuildingDef] = [
+    BuildingDef("storehouse", "저장고 — 인벤토리 +5칸, 식량 저장 한도 +10",
+                {"wood": 5, "stone": 3},
+                {"max_inventory": 5, "max_food_storage": 10.0}),
+    BuildingDef("watchtower", "감시탑 — 탐험 범위 +2, 주변 개체 탐지 반경 +1",
+                {"wood": 5, "stone": 5},
+                {"explore_range": 2, "detection_radius": 1}),
+    BuildingDef("wall", "벽 — 영토 전투 시 방어력 +30%",
+                {"stone": 8, "wood": 3},
+                {"defense_bonus": 0.3}),
+    BuildingDef("forge", "대장간 — 제작 효율 +50%, 철 레시피 비용 -1",
+                {"stone": 5, "iron": 3},
+                {"craft_efficiency": 0.5, "iron_cost_discount": 1.0}),
+    BuildingDef("shrine", "제단 — 사회성 +0.2, 지식 전수율 +20%",
+                {"wood": 3, "stone": 2, "gold": 1},
+                {"sociability_bonus": 0.2, "knowledge_transfer_boost": 0.2}),
+]
+
+BUILDING_DESTROY_CHANCE = 0.05  # 전투/재해 시 건물 파괴 확률
 
 
 # ──────────────────────────────────────────────

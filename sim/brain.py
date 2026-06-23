@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
 from . import config
+from . import buildings as bld
 from .faction import Faction
 
 if TYPE_CHECKING:
@@ -130,12 +131,19 @@ class RuleBasedBrain(Brain):
                 scores[EntityState.CRAFT] = (
                     entity.genome.industry * 40.0 + random.uniform(0, 10))
 
-        # 6. COMBAT
+        # 6. CONSTRUCT
+        if not entity.buildings:
+            for bdef in config.BUILDING_DEFS:
+                if bld.can_construct(entity, bdef):
+                    scores[EntityState.CONSTRUCT] = 35.0 + entity.genome.industry * 20.0
+                    break
+
+        # 7. COMBAT
         combat_score = self._score_combat(entity, world)
         if combat_score > 0:
             scores[EntityState.COMBAT] = combat_score
 
-        # 7. EXPLORE
+        # 8. EXPLORE
         if entity.curiosity_drive() > 0:
             scores[EntityState.EXPLORE] = (
                 entity.genome.curiosity * 20.0 + random.uniform(0, 15))
@@ -391,6 +399,12 @@ class SmartBrain(RuleBasedBrain):
                 scores[EntityState.CRAFT] = (
                     entity.genome.industry * 40.0 + random.uniform(0, 10))
 
+        if not entity.buildings:
+            for bdef in config.BUILDING_DEFS:
+                if bld.can_construct(entity, bdef):
+                    scores[EntityState.CONSTRUCT] = 35.0 + entity.genome.industry * 20.0
+                    break
+
         combat_score = self._score_combat(entity, world)
         if combat_score > 0:
             scores[EntityState.COMBAT] = combat_score
@@ -445,11 +459,12 @@ class SmartBrain(RuleBasedBrain):
         from .entity import EntityState
         action_name = chosen_action.name.lower()
         follow_up = {
-            "gather": "trade",       # 채집 후 남는 거래
-            "trade": "craft",        # 거래로 재료 모은 후 제작
-            "craft": "explore",      # 제작 후 새로운 영역 탐험
-            "combat": "gather",      # 전투 후 자원 채집
-            "consume": "gather",     # 먹고 나서 채집
+            "gather": "trade",
+            "trade": "craft",
+            "craft": "construct",
+            "construct": "explore",
+            "combat": "gather",
+            "consume": "gather",
         }
         if action_name in follow_up:
             next_state = self._action_name_to_state(follow_up[action_name])
@@ -703,6 +718,7 @@ class SmartBrain(RuleBasedBrain):
             "gather": EntityState.GATHER,
             "trade": EntityState.TRADE,
             "craft": EntityState.CRAFT,
+            "construct": EntityState.CONSTRUCT,
             "consume": EntityState.CONSUME,
             "reproduce": EntityState.REPRODUCE,
             "combat": EntityState.COMBAT,

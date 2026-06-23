@@ -106,13 +106,12 @@ class Tile:
         self.resources[resource_type] = available - taken
         return taken
 
-    def regenerate(self) -> None:
-        """매 틱마다 자원이 최대치 방향으로 소량 회복."""
+    def regenerate(self, mult: float = 1.0) -> None:
         max_res = config.MAX_TILE_RESOURCES.get(self.biome.value, {})
         for rtype, max_val in max_res.items():
             current = self.resources.get(rtype, 0.0)
             if current < max_val:
-                delta = max_val * config.RESOURCE_REGEN_RATE
+                delta = max_val * config.RESOURCE_REGEN_RATE * mult
                 self.resources[rtype] = min(max_val, current + delta)
 
     def total_resources(self) -> float:

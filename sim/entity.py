@@ -10,6 +10,7 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
 from . import config
+from . import buildings as bld
 from .brain import Brain, RuleBasedBrain, create_brain
 from .faction import Faction
 from .genome import Genome
@@ -32,6 +33,7 @@ class EntityState(Enum):
     CONSUME = auto()
     REPRODUCE = auto()
     COMBAT = auto()
+    CONSTRUCT = auto()
     DIE = auto()
 
 
@@ -104,6 +106,9 @@ class Entity:
         # 행동 지속성 (여러 틱에 걸친 행동 완료 추적)
         self.action_progress: float = 0.0
 
+        # 건물 목록
+        self.buildings: list[str] = []
+
         # 두뇌 (의사결정 엔진) - 외부에서 교체 가능
         self.brain: Brain = RuleBasedBrain()
 
@@ -118,7 +123,10 @@ class Entity:
     # ──────────────────────────────────────────
     @property
     def speed(self) -> float:
-        return config.BASE_SPEED * (0.5 + 1.0 * self.genome.speed)
+        base = config.BASE_SPEED * (0.5 + 1.0 * self.genome.speed)
+        if hasattr(self, "_season_speed_mod"):
+            base *= self._season_speed_mod
+        return base
 
     @property
     def inventory_used(self) -> int:
@@ -158,7 +166,7 @@ class Entity:
         return df
 
     def get_combined_effects(self) -> dict[str, float]:
-        """보유한 모든 기술의 effects를 통합한 dict 반환."""
+        """보유한 모든 기술 effects + 건물 effects를 통합한 dict 반환."""
         combined: dict[str, float] = {}
         for tech_name in self.knowledge.known:
             for tdef in config.TECH_TREE:
@@ -168,6 +176,9 @@ class Entity:
                             combined[k] = combined.get(k, 0.0) + v
                         elif isinstance(v, bool) and v:
                             combined[k] = 1.0
+        building_effects = bld.get_building_effects(self)
+        for k, v in building_effects.items():
+            combined[k] = combined.get(k, 0.0) + v
         return combined
 
     def get_gather_bonus(self, resource_type: str) -> float:
@@ -205,7 +216,8 @@ class Entity:
         events: list[dict] = []
         effects = self.get_combined_effects()
         energy_efficiency = effects.get("energy_efficiency", 0.0)
-        energy_cost = config.ENERGY_COST.get(state.name.lower(), 1.0) * (1.0 - energy_efficiency)
+        season_mult = getattr(self, "_season_energy_mult", 1.0)
+        energy_cost = config.ENERGY_COST.get(state.name.lower(), 1.0) * (1.0 - energy_efficiency) * season_mult
 
         if state == EntityState.EXPLORE:
             result = self._do_explore(world)
@@ -228,6 +240,9 @@ class Entity:
             events.extend(result)
         elif state == EntityState.COMBAT:
             result = self._do_combat(world)
+            events.extend(result)
+        elif state == EntityState.CONSTRUCT:
+            result = self._do_construct()
             events.extend(result)
         elif state == EntityState.DIE:
             self.alive = False
@@ -302,7 +317,8 @@ class Entity:
             if amount >= max_slot:
                 continue
 
-            can_gather = 2.0 * self.get_gather_bonus(rtype)
+            season_gather = getattr(self, "_season_gather_mult", 1.0)
+            can_gather = 2.0 * self.get_gather_bonus(rtype) * season_gather
             gathered = tile.gather(rtype, can_gather)
             if gathered > 0:
                 self.inventory[rtype] = self.inventory.get(rtype, 0) + gathered
@@ -399,6 +415,14 @@ class Entity:
                         del self.inventory[mat]
                 self.equipped.append(recipe_name)
                 return [self._event("craft", {"item": recipe_name})]
+        return []
+
+    def _do_construct(self) -> list[dict]:
+        for bdef in config.BUILDING_DEFS:
+            if bdef.name in self.buildings:
+                continue
+            if bld.construct(self, bdef, None):
+                return [self._event("construct", {"building": bdef.name})]
         return []
 
     def _do_reproduce(self, world: World) -> list[dict]:
@@ -573,6 +597,16 @@ class Entity:
             "target_allies": target_ally_names,
             "target_alive": not target_killed,
         }))
+
+        # ── 건물 파괴 (전투 후) ──
+        destroyed = bld.destroy_random_building(self)
+        if destroyed:
+            events.append(self._event("building_destroyed", {"building": destroyed}))
+        if target_killed:
+            destroyed_target = bld.destroy_random_building(target)
+            if destroyed_target:
+                events.append(self._event("building_destroyed",
+                                           {"building": destroyed_target, "target": target.name}))
 
         # ── 장비 파괴 (전투 후) ──
         for item in list(self.equipped):

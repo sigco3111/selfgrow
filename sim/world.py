@@ -38,6 +38,10 @@ class World:
         # 파벌 레지스트리: faction_id -> Faction
         self.faction_registry: dict[int, Faction] = {}
 
+        # 이벤트 레지스트리: 활성화된 WorldEvent 목록
+        self.event_registry: list = []
+        self._last_event_tick: int = 0
+
     @property
     def faction_count(self) -> int:
         return len(self.faction_registry)
@@ -176,11 +180,11 @@ class World:
         return dist <= config.TERRITORY_RADIUS
 
     # ── 틱 업데이트 ──
-    def tick_update(self) -> None:
+    def tick_update(self, regen_mult: float = 1.0) -> None:
         self.tick += 1
         for row in self.tiles:
             for tile in row:
-                tile.regenerate()
+                tile.regenerate(mult=regen_mult)
 
     # ── 통계 ──
     def traversable_tiles(self) -> int:

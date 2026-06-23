@@ -16,6 +16,7 @@ from rich.text import Text
 from rich.theme import Theme
 
 from . import config
+from . import season as sea
 from .metrics import MetricsCollector
 
 if TYPE_CHECKING:
@@ -140,9 +141,16 @@ class TerminalVisualizer:
     # Header
     # ------------------------------------------
     def _render_header(self, state) -> Panel:
-        """네온 타이틀 바."""
         tick_str = f"틱 {state.tick:05d}"
         pop_str = f"생존 {state.alive_count}/{state.population}"
+
+        snap = self.engine.metrics.latest()
+        season_str = ""
+        if snap:
+            season_emoji = {0: "\ud83c\udf38", 1: "\u2600\ufe0f", 2: "\ud83c\udf42", 3: "\u2744\ufe0f"}
+            se = season_emoji.get(snap.current_season, "")
+            season_str = f"{se} {snap.season_name}"
+
         title = Text.assemble(
             (">> ", "cp.cyan"),
             ("자가발전 문명", "cp.magenta"),
@@ -153,6 +161,11 @@ class TerminalVisualizer:
             ("  |  ", "cp.dim"),
             (pop_str, "cp.green"),
         )
+        if season_str:
+            status.append(Text.assemble(
+                ("  |  ", "cp.dim"),
+                (season_str, "cp.amber"),
+            ))
         bar = Text.assemble(
             (" ", "cp.dim"),
         )
@@ -364,6 +377,26 @@ class TerminalVisualizer:
             Panel(mkt, title="[cp.purple]\U0001f4b1 시장[/]", box=ROUNDED, border_style="cp.dim")
         )
 
+        # -- Buildings --
+        bld_data = {"total": 0}
+        for e in self.engine.world.entities.values():
+            if e.alive:
+                for b in e.buildings:
+                    bld_data[b] = bld_data.get(b, 0) + 1
+                    bld_data["total"] += 1
+        if bld_data["total"] > 0:
+            bld_grid = Table.grid(padding=(0, 2))
+            bld_grid.add_column(style="cp.dim", width=14)
+            bld_grid.add_column(style="cp.text")
+            bld_grid.add_row("건물", f"{bld_data['total']}개")
+            for bname, count in sorted(bld_data.items()):
+                if bname == "total":
+                    continue
+                bld_grid.add_row(f"  {bname}", f"{count}")
+            groups.append(
+                Panel(bld_grid, title="[cp.amber]\U0001f3db 건물[/]", box=ROUNDED, border_style="cp.dim")
+            )
+
         return Panel(
             Group(*groups),
             title=Text.assemble(("\u2699", "cp.magenta"), (" 상태", "cp.magenta")),
@@ -438,18 +471,12 @@ class TerminalVisualizer:
             )
 
         important_types = {
-            "reproduce",
-            "death",
-            "starvation",
-            "tech_discovery",
-            "combat",
-            "craft",
-            "loot",
-            "faction_formed",
-            "faction_disbanded",
-            "knowledge_loot",
-            "equipment_loot",
-            "equipment_broken",
+            "reproduce", "death", "starvation", "tech_discovery",
+            "combat", "craft", "construct", "loot",
+            "faction_formed", "faction_disbanded",
+            "knowledge_loot", "equipment_loot", "equipment_broken",
+            "event_started", "event_ended", "event_death",
+            "building_destroyed",
         }
         recent = [e for e in reversed(events) if e.get("type") in important_types][:6]
 
@@ -566,6 +593,44 @@ class TerminalVisualizer:
                     ("\U0001f4a5 ", "cp.red"),
                     (f"{name}", "cp.text"),
                     (f" {item} 파괴!", "cp.red"),
+                )
+            elif etype == "construct":
+                bld_name = data.get("building", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\U0001f3d7 ", "cp.amber"),
+                    (f"{name}", "cp.text"),
+                    (f" \u2192 {bld_name} 건설!", "cp.amber"),
+                )
+            elif etype == "event_started":
+                ev_name = data.get("event", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\U0001f4a5 ", "cp.red"),
+                    (f"\u26a0 {ev_name} 발생!", "cp.red"),
+                )
+            elif etype == "event_ended":
+                ev_name = data.get("event", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\u2705 ", "cp.green"),
+                    (f"{ev_name} 종료", "cp.green"),
+                )
+            elif etype == "event_death":
+                cause = data.get("cause", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\u2620 ", "cp.red"),
+                    (f"{name}", "cp.text"),
+                    (f" {cause} 사망", "cp.red"),
+                )
+            elif etype == "building_destroyed":
+                bld_name = data.get("building", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\U0001f4a5 ", "cp.red"),
+                    (f"{name}", "cp.text"),
+                    (f" {bld_name} \ud83d\udca5", "cp.red"),
                 )
             else:
                 t = Text(f"[{tick}] {etype}: {name} {data}", style="cp.dim")

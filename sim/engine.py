@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from . import config
+from . import buildings as bld
+from . import events as evt
+from . import season as sea
 from .brain import BrainMessage, create_brain
 from .entity import Entity, EntityState
 from .faction import Faction
@@ -110,18 +113,30 @@ class SimulationEngine:
 
     def _step(self) -> None:
         """한 틱 실행."""
-        # 1. 월드 업데이트 (자원 재생성)
-        self.world.tick_update()
+        # 0. 계절 계산
+        current_season = sea.compute_season(self.world.tick)
+        season_effects = sea.get_season_effects(current_season)
+
+        # 1. 월드 업데이트 (자원 재생성, 계절 효과 적용)
+        self.world.tick_update(regen_mult=season_effects.regen_mult)
 
         # 2. 시장 업데이트 (주문 에이징)
         self.market.tick_update()
 
-        # 3. 개체 행동
+        # 3. 랜덤 이벤트 처리
+        event_logs = evt.process_events(self.world)
+        for log in event_logs:
+            log["tick"] = self.world.tick
+            self._log_event(log)
+
+        # 4. 개체 행동
         entities = list(self.world.entities.values())
         random.shuffle(entities)  # 처리 순서 랜덤화
 
         for entity in entities:
             if not entity.alive:
+                # 이벤트/기타 외부 요인으로 사망 — 사망 기록
+                self.metrics.record_death()
                 continue
 
             # 나이 먹기
@@ -130,6 +145,9 @@ class SimulationEngine:
             if not entity.alive:
                 self.metrics.record_death()
                 continue
+
+            # 계절 속도 보정
+            entity._season_speed_mod = season_effects.speed_mult
 
             # 기술 효과 적용
             entity.apply_knowledge_effects()
@@ -160,10 +178,12 @@ class SimulationEngine:
                 })
                 continue
 
-            # 행동 결정 및 실행
+            # 행동 결정 및 실행 (계절 에너지 비용 보정)
             before_wealth = entity.total_wealth()
             before_energy = entity.energy
             action = entity.decide_action(self.world, self.market)
+            entity._season_energy_mult = season_effects.energy_mult
+            entity._season_gather_mult = season_effects.gather_mult
             events = entity.execute_action(action, self.world, self.market)
 
             # SmartBrain 피드백: 행동 결과 점수 기록
@@ -216,9 +236,15 @@ class SimulationEngine:
             snap = self.metrics.snapshot(
                 self.world.tick, self.world, self.market
             )
-            # 기술 정보 갱신
             snap.discovered_techs = self.tech_tree.discover_count()
             snap.total_techs = self.tech_tree.total_count()
+            snap.current_season = current_season.value
+            snap.season_name = sea.SEASON_NAMES_KR[current_season]
+            snap.active_events = len(self.world.event_registry)
+            total_buildings = sum(
+                len(e.buildings) for e in self.world.entities.values() if e.alive
+            )
+            snap.total_buildings = total_buildings
 
     # ──────────────────────────────────────────
     # 하부 프로세스

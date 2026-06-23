@@ -49,6 +49,11 @@ class Snapshot:
     rule_total_kills: int = 0
     smart_total_wealth: float = 0.0
     rule_total_wealth: float = 0.0
+    # 계절 / 이벤트 / 건물
+    current_season: int = 0
+    season_name: str = "봄"
+    active_events: int = 0
+    total_buildings: int = 0
 
 
 class MetricsCollector:
