@@ -10,6 +10,8 @@ from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
 from . import config
+from .brain import Brain, RuleBasedBrain, create_brain
+from .faction import Faction
 from .genome import Genome
 from .knowledge import KnowledgeBook
 
@@ -87,6 +89,7 @@ class Entity:
 
         # 전투
         self.kill_count = 0
+        self.faction_id: int = -1  # -1 = 무소속
 
         # 화폐 (발견 시)
         self.currency: CurrencyType = CurrencyType.NONE
@@ -100,6 +103,12 @@ class Entity:
 
         # 행동 지속성 (여러 틱에 걸친 행동 완료 추적)
         self.action_progress: float = 0.0
+
+        # 두뇌 (의사결정 엔진) - 외부에서 교체 가능
+        self.brain: Brain = RuleBasedBrain()
+
+        # 메일박스 (다른 개체의 메시지 수신)
+        self.mailbox: list[dict] = []
 
         # 통계 디버깅용
         self.last_action: str = "idle"
@@ -120,13 +129,24 @@ class Entity:
         return self.inventory_used >= self.max_inventory_slots
 
     def total_wealth(self) -> float:
-        """개체의 총 자산 (인벤토리 + 화폐)."""
-        return sum(self.inventory.values()) + self.money
+        """개체의 총 자산 (인벤토리 + 화폐, 기술 보정 포함)."""
+        effects = self.get_combined_effects()
+        gold_mult = effects.get("gold_value_mult", 1.0)
+        total = self.money
+        for rtype, amount in self.inventory.items():
+            if rtype == "gold":
+                total += amount * gold_mult
+            else:
+                total += amount
+        return total
 
     def get_effective_attack(self) -> float:
         atk = self.attack
         for item in self.equipped:
             bonus = config.CRAFT_BONUS.get(item, {}).get("attack", 0)
+            effects = self.get_combined_effects()
+            if effects.get("craft_weapon_boost", 0) >= 1 and "sword" in item:
+                bonus *= 2.0
             atk += bonus
         return atk
 
@@ -137,160 +157,40 @@ class Entity:
             df += bonus
         return df
 
+    def get_combined_effects(self) -> dict[str, float]:
+        """보유한 모든 기술의 effects를 통합한 dict 반환."""
+        combined: dict[str, float] = {}
+        for tech_name in self.knowledge.known:
+            for tdef in config.TECH_TREE:
+                if tdef.name == tech_name:
+                    for k, v in tdef.effect.items():
+                        if isinstance(v, (int, float)):
+                            combined[k] = combined.get(k, 0.0) + v
+                        elif isinstance(v, bool) and v:
+                            combined[k] = 1.0
+        return combined
+
     def get_gather_bonus(self, resource_type: str) -> float:
         bonus = 1.0
         for item in self.equipped:
             bonus += config.CRAFT_BONUS.get(item, {}).get(
                 f"gather_{resource_type}", 0)
-        # 기술 보너스
-        if self.knowledge.know("basic_agriculture") and resource_type == "food":
-            bonus *= 1.5
-        if self.knowledge.know("irrigation") and resource_type == "food":
-            bonus *= 2.0
-        if self.knowledge.know("mining") and resource_type in ("stone", "iron"):
-            bonus *= 1.5
+        effects = self.get_combined_effects()
+        gather_key = f"gather_{resource_type}"
+        if gather_key in effects:
+            bonus *= effects[gather_key]
         return bonus
 
     # ──────────────────────────────────────────
-    # 행동 결정 (Decision Engine)
+    # 행동 결정 — brain에 위임
     # ──────────────────────────────────────────
     def decide_action(self, world: World, market: Optional[Market]) -> EntityState:
-        """현재 상태 + 환경 + 유전자에 기반해 행동 점수 계산 후 최고 선택."""
-        if self.energy <= 0:
-            return EntityState.DIE
+        """두뇌(brain)에 행동 결정을 위임합니다.
 
-        scores: dict[EntityState, float] = {}
-
-        # 1. CONSUME — 배고프면 먹기
-        hunger_ratio = 1.0 - (self.energy / self.max_energy)
-        food_available = self.inventory.get("food", 0)
-        if food_available > 0 and hunger_ratio > 0.2:
-            scores[EntityState.CONSUME] = hunger_ratio * 100.0
-        elif hunger_ratio > 0.6:
-            # 매우 배고프면 채집부터
-            scores[EntityState.GATHER] = hunger_ratio * 90.0
-
-        # 2. REPRODUCE — 번식 조건 (까다롭게)
-        energy_ratio = self.energy / self.max_energy
-        food_stored = self.inventory.get("food", 0)
-        if (energy_ratio > config.REPRODUCTION_ENERGY_RATIO
-                and self.reproduction_cooldown <= 0
-                and food_stored >= config.REPRODUCTION_MIN_FOOD
-                and self.inventory_used >= 3):
-            scores[EntityState.REPRODUCE] = (energy_ratio * 40.0
-                                             * (0.3 + self.genome.fertility * 0.7))
-
-        # 3. GATHER — 자원 채집
-        tile = world.tile_at(self.x, self.y)
-        if tile and tile.total_resources() > 0 and not self.inventory_is_full:
-            need = self._resource_need()
-            if need > 0:
-                scores[EntityState.GATHER] = need * 30.0 + random.uniform(0, 10)
-
-        # 4. TRADE — 거래 가능성
-        if market and not self.inventory_is_full:
-            # 거래할 게 있으면
-            surplus = self._has_surplus()
-            if surplus:
-                scores[EntityState.TRADE] = (
-                    self.genome.sociability * 50.0 + random.uniform(0, 10))
-
-        # 5. CRAFT — 제작
-        if self.genome.industry > 0.4:
-            can_craft = self._can_craft_anything()
-            if can_craft:
-                scores[EntityState.CRAFT] = (
-                    self.genome.industry * 40.0 + random.uniform(0, 10))
-
-        # 6. COMBAT — 공격 (약탈 + 영토방어 + 일반)
-        combat_score = 0.0
-        food_stored = self.inventory.get("food", 0)
-        nearby_entities = [(eid, e) for eid, e in world.entities.items()
-                           if e.alive and e != self
-                           and abs(e.x - self.x) <= 1 and abs(e.y - self.y) <= 1]
-        same_tile = [(eid, e) for (eid, e) in nearby_entities
-                     if (e.x, e.y) == (self.x, self.y)]
-
-        # 6a. 약탈: 식량이 부족하고 이웃이 식량을 가지고 있으면 (충분한 에너지 있을 때만)
-        if food_stored < 3 and energy_ratio > 0.3:
-            for _, neighbor in nearby_entities:
-                if neighbor.inventory.get("food", 0) >= 3:
-                    combat_score = max(combat_score, 80.0 + (1.0 - energy_ratio) * 30.0)
-                    break
-
-        # 6b. 영토방어: 내 본거지 근처에 다른 개체가 있으면
-        if self.home_x is not None:
-            dist_to_home = abs(self.x - self.home_x) + abs(self.y - self.home_y)
-            if dist_to_home <= config.TERRITORY_RADIUS:
-                for _, neighbor in same_tile:
-                    other_home = getattr(neighbor, "home_x", None)
-                    if other_home is not None:
-                        other_dist = abs(neighbor.x - other_home) + abs(neighbor.y - other_home)
-                        if other_dist > config.TERRITORY_RADIUS:
-                            combat_score = max(combat_score, 60.0 * self.genome.aggression)
-
-        # 6c. 일반 공격: 같은 타일에 다른 개체가 있으면
-        if same_tile:
-            if self.genome.aggression > 0.2:
-                combat_score = max(combat_score,
-                                   self.genome.aggression * 30.0 + random.uniform(0, 10))
-            elif self.genome.aggression > 0.1:
-                # 약간만 공격적이어도 일정 확률로 공격
-                combat_score = max(combat_score, self.genome.aggression * 15.0)
-
-        if combat_score > 0:
-            scores[EntityState.COMBAT] = combat_score
-
-        # 7. EXPLORE — 기본 행동 (항상 선택 가능)
-        if self.curiosity_drive() > 0:
-            scores[EntityState.EXPLORE] = (
-                self.genome.curiosity * 20.0 + random.uniform(0, 15))
-
-        # 8. IDLE — 아무것도 안 함 (마지막 보루)
-        scores[EntityState.IDLE] = 5.0
-
-        # 최고 점수 선택
-        best = max(scores, key=scores.get)
-        return best
-
-    def _resource_need(self) -> float:
-        """자원 부족도 (0~1). 높을수록 채집이 시급."""
-        need = 0.0
-        # 식량
-        food = self.inventory.get("food", 0)
-        if food < 5:
-            need += 0.5
-        # 목재
-        wood = self.inventory.get("wood", 0)
-        if wood < 3:
-            need += 0.2
-        # 돌
-        stone = self.inventory.get("stone", 0)
-        if stone < 3:
-            need += 0.15
-        # 철
-        iron = self.inventory.get("iron", 0)
-        if iron < 2 and self.genome.specialization in ("miner", "warrior", "crafter"):
-            need += 0.15
-        return min(1.0, need)
-
-    def _has_surplus(self) -> bool:
-        """거래할 여분 자원이 있는가?"""
-        for rtype, amount in self.inventory.items():
-            if rtype == "food" and amount > 5:
-                return True
-            if rtype != "food" and amount > 3:
-                return True
-        return False
-
-    def _can_craft_anything(self) -> bool:
-        for recipe_name, ingredients in config.CRAFT_RECIPES.items():
-            # 장비 중복 확인
-            if recipe_name in self.equipped:
-                continue
-            if all(self.inventory.get(mat, 0) >= qty for mat, qty in ingredients):
-                return True
-        return False
+        brain 속성을 교체(RuleBasedBrain / SmartBrain)하면
+        의사결정 방식이 바뀝니다.
+        """
+        return self.brain.decide(self, world, market)
 
     def curiosity_drive(self) -> float:
         """주변에 얼마나 방문하지 않은 타일이 있는지에 따른 호기심."""
@@ -303,7 +203,9 @@ class Entity:
                        world: World, market: Optional[Market]) -> list[dict]:
         """선택된 행동을 실행하고 이벤트 로그 반환."""
         events: list[dict] = []
-        energy_cost = config.ENERGY_COST.get(state.name.lower(), 1.0)
+        effects = self.get_combined_effects()
+        energy_efficiency = effects.get("energy_efficiency", 0.0)
+        energy_cost = config.ENERGY_COST.get(state.name.lower(), 1.0) * (1.0 - energy_efficiency)
 
         if state == EntityState.EXPLORE:
             result = self._do_explore(world)
@@ -344,8 +246,12 @@ class Entity:
     # ── 세부 행동 구현 ──
 
     def _do_explore(self, world: World) -> list[dict]:
-        """이웃 타일로 이동."""
-        neighbors = world.get_neighbors(self.x, self.y)
+        """이웃 타일로 이동. 항해술(sailing) 보유 시 물 타일 통과 및 추가 이동."""
+        effects = self.get_combined_effects()
+        can_cross_water = effects.get("cross_water", 0) >= 1
+        explore_range = int(effects.get("explore_range", 0))
+
+        neighbors = world.get_neighbors(self.x, self.y, filter_traversable=not can_cross_water)
         if not neighbors:
             return []
 
@@ -354,7 +260,13 @@ class Entity:
             if unvisited:
                 nx, ny = random.choice(unvisited)
                 self.x, self.y = nx, ny
-                return [self._event("move", {"to": (nx, ny)})]
+                # 추가 이동 (sailing)
+                if explore_range > 0 and random.random() < 0.3:
+                    extended = world.get_neighbors(nx, ny, filter_traversable=not can_cross_water)
+                    if extended:
+                        ex, ey = random.choice(extended)
+                        self.x, self.y = ex, ey
+                return [self._event("move", {"to": (self.x, self.y)})]
 
         nx, ny = random.choice(neighbors)
         self.x, self.y = nx, ny
@@ -367,6 +279,9 @@ class Entity:
         tile = world.tile_at(self.x, self.y)
         if not tile:
             return events, 0.0
+
+        effects = self.get_combined_effects()
+        max_food_storage = effects.get("max_food_storage", 0.0)
 
         # 특화에 따라 선호 자원 결정
         pref = self.genome.specialization
@@ -381,7 +296,9 @@ class Entity:
             if self.inventory_is_full:
                 break
             amount = self.inventory.get(rtype, 0)
-            max_slot = 8  # 한 자원당 최대 8단위까지
+            max_slot = 8
+            if rtype == "food" and max_food_storage > 0:
+                max_slot += int(max_food_storage)
             if amount >= max_slot:
                 continue
 
@@ -404,21 +321,35 @@ class Entity:
         if food <= 0:
             return []
 
+        effects = self.get_combined_effects()
+        food_energy_mult = effects.get("food_energy_mult", 1.0)
+
         consume = min(food, 2.0)
         self.inventory["food"] = food - consume
-        gained = consume * config.FOOD_ENERGY
+        gained = consume * config.FOOD_ENERGY * food_energy_mult
         self.energy = min(self.max_energy, self.energy + gained)
         return [self._event("consume", {"food": consume, "energy_gained": gained})]
 
     def _do_trade(self, world: World, market: Market) -> list[dict]:
         """시장에 매도 주문 등록 및 주변 개체와 직거래."""
         events = []
+        effects = self.get_combined_effects()
+        trade_efficiency = effects.get("trade_efficiency", 0.0)
+        trade_gold_bonus = effects.get("trade_gold_bonus", 0.0)
+        market_tax_discount = effects.get("market_tax_discount", 0.0)
 
         # 1. 팔 surplus 자원: 매도 주문 등록
         for rtype, amount in list(self.inventory.items()):
-            if amount > 3:
+            surplus_threshold = 4 if rtype == "food" else 3
+            if amount > surplus_threshold:
                 sell_qty = amount * 0.5  # 절반 판매
-                unit_price = market.get_average_price(rtype) * (0.85 + 0.3 * self.genome.sociability)
+                price_mult = 0.85 + 0.3 * self.genome.sociability + trade_efficiency * 0.3
+                unit_price = market.get_average_price(rtype) * price_mult
+
+                # 금 거래 보너스 (alchemy)
+                if rtype == "gold" and trade_gold_bonus > 0:
+                    unit_price *= 1.0 + trade_gold_bonus
+
                 market.place_order(
                     seller_id=id(self),
                     resource_type=rtype,
@@ -434,7 +365,8 @@ class Entity:
         for rtype in ["food", "wood", "stone"]:
             if self.inventory.get(rtype, 0) < 2:
                 buy_qty = 3 - self.inventory.get(rtype, 0)
-                unit_price = market.get_average_price(rtype) * (0.85 + 0.3 * self.genome.sociability)
+                price_mult = 0.85 + 0.3 * self.genome.sociability + trade_efficiency * 0.3
+                unit_price = market.get_average_price(rtype) * price_mult
                 market.place_order(
                     seller_id=id(self),
                     resource_type=rtype,
@@ -450,11 +382,14 @@ class Entity:
 
     def _do_craft(self) -> list[dict]:
         """인벤토리 재료를 소비해 도구/무기 제작."""
+        effects = self.get_combined_effects()
+        can_craft_iron = effects.get("craft_iron", 0) >= 1
+
         for recipe_name, ingredients in config.CRAFT_RECIPES.items():
             if recipe_name in self.equipped:
                 continue
-            # 금속 관련 레시피는 야금술 필요
-            if "iron" in recipe_name and not self.knowledge.know("metallurgy"):
+            # 금속 관련 레시피는 야금술(metallurgy) 필요
+            if "iron" in recipe_name and not can_craft_iron:
                 continue
 
             if all(self.inventory.get(mat, 0) >= qty for mat, qty in ingredients):
@@ -527,25 +462,51 @@ class Entity:
         })]
 
     def _do_combat(self, world: World) -> list[dict]:
-        """같은 타일의 적과 전투."""
-        same_tile = [(eid, e) for eid, e in world.entities.items()
-                     if (e.x, e.y) == (self.x, self.y) and e != self and e.alive]
-        if not same_tile:
+        """강화된 전투: 다중 개체 + 동맹 지원 + 장비 파괴 + 지식 약탈."""
+        events = []
+        same_tile_targets = [(eid, e) for eid, e in world.entities.items()
+                             if (e.x, e.y) == (self.x, self.y) and e != self and e.alive]
+        if not same_tile_targets:
             return []
 
-        target_id, target = same_tile[0]
+        target_id, target = same_tile_targets[0]
 
-        # 영토 보너스: 본거지 근처에서 싸우면 공/방 +30%
+        # ── 동맹 지원: 같은 파벌 멤버가 근처에 있으면 전투 합류 ──
+        allies: list[Entity] = []
+        if self.faction_id >= 0:
+            faction_registry = getattr(world, "faction_registry", {})
+            my_faction = faction_registry.get(self.faction_id)
+            if my_faction:
+                for eid, ent in world.entities.items():
+                    if (ent.alive and ent != self and ent != target
+                            and ent.faction_id == self.faction_id):
+                        dist = abs(ent.x - self.x) + abs(ent.y - self.y)
+                        if dist <= config.FACTION_ALLY_SUPPORT_RADIUS:
+                            allies.append(ent)
+
+        # ── 영토 보너스 ──
+        effects = self.get_combined_effects()
+        extra_home_bonus = effects.get("home_bonus_extra", 0.0)
         home_bonus = 1.0
         if self.home_x is not None:
             dist_to_home = abs(self.x - self.home_x) + abs(self.y - self.home_y)
             if dist_to_home <= config.TERRITORY_RADIUS:
-                home_bonus = 1.0 + config.COMBAT_HOME_BONUS
+                home_bonus = 1.0 + config.COMBAT_HOME_BONUS + extra_home_bonus
 
-        my_atk = self.get_effective_attack() * home_bonus
-        target_def = target.get_effective_defense()
+        # 동맹 보너스
+        ally_bonus = 1.0
+        if allies:
+            ally_bonus = 1.0 + config.FACTION_ALLY_COMBAT_BONUS * min(len(allies), 3)
 
-        # 상대가 본거지 근처이면 방어 보너스
+        # 파벌 사기 보너스 (bureaucracy)
+        faction_morale = effects.get("faction_morale", 0.0)
+        if self.faction_id >= 0 and faction_morale > 0:
+            ally_bonus += faction_morale
+
+        my_atk = self.get_effective_attack() * home_bonus * ally_bonus
+        my_def = self.get_effective_defense() * home_bonus * ally_bonus
+
+        # 상대 영토 보너스
         target_home_bonus = 1.0
         other_home_x = getattr(target, "home_x", None)
         other_home_y = getattr(target, "home_y", None)
@@ -553,33 +514,81 @@ class Entity:
             other_dist = abs(target.x - other_home_x) + abs(target.y - other_home_y)
             if other_dist <= config.TERRITORY_RADIUS:
                 target_home_bonus = 1.0 + config.COMBAT_HOME_BONUS
-        target_def = target.get_effective_defense() * target_home_bonus
 
-        # 데미지 계산
+        # 상대 동맹 지원
+        target_ally_bonus = 1.0
+        target_allies: list[Entity] = []
+        if target.faction_id >= 0:
+            faction_registry = getattr(world, "faction_registry", {})
+            target_faction = faction_registry.get(target.faction_id)
+            if target_faction:
+                for eid, ent in world.entities.items():
+                    if (ent.alive and ent != target and ent != self
+                            and ent.faction_id == target.faction_id):
+                        dist = abs(ent.x - target.x) + abs(ent.y - target.y)
+                        if dist <= config.FACTION_ALLY_SUPPORT_RADIUS:
+                            target_allies.append(ent)
+        if target_allies:
+            target_ally_bonus = 1.0 + config.FACTION_ALLY_COMBAT_BONUS * min(len(target_allies), 3)
+
+        target_atk = target.get_effective_attack() * target_home_bonus * target_ally_bonus
+        target_def = target.get_effective_defense() * target_home_bonus * target_ally_bonus
+
+        # ── 데미지 계산 ──
         base_damage = config.COMBAT_BASE_DAMAGE
         variance = 1.0 + random.uniform(-config.COMBAT_DAMAGE_VARIANCE,
                                          config.COMBAT_DAMAGE_VARIANCE)
         damage_dealt = max(1, (my_atk / (target_def + 1)) * base_damage * variance)
-        damage_taken = max(1, (target.get_effective_attack() / (self.get_effective_defense() + 1))
-                          * base_damage * variance * 0.7)
+        damage_taken = max(1, (target_atk / (my_def + 1)) * base_damage * variance * 0.7)
 
         target.energy -= damage_dealt
         self.energy -= damage_taken
 
-        # 승리: 패자 인벤토리 약탈
+        # ── 동맹도 데미지 기여 (일부) ──
+        ally_damage = 0.0
+        for ally in allies:
+            ally_contrib = ally.get_effective_attack() * config.COMBAT_ALLY_CONTRIBUTION
+            ally_damage += ally_contrib
+            ally.energy -= config.ENERGY_COST["combat"] * 0.3  # 동맹도 에너지 소모
+            events.append(self._event("ally_attack", {
+                "ally": ally.name,
+                "damage_contrib": round(ally_contrib, 1),
+            }))
+        if ally_damage > 0:
+            target.energy -= ally_damage * 0.5  # 동맹 데미지 50%만 적용 (밸런스)
+
         target_killed = target.energy <= 0
         if target_killed:
             target.alive = False
             self.kill_count += 1
 
-        events = [self._event("combat", {
+        # ── 전투 이벤트 ──
+        ally_names = [a.name for a in allies]
+        target_ally_names = [a.name for a in target_allies]
+        events.append(self._event("combat", {
             "target": target.name,
             "damage_dealt": round(damage_dealt, 1),
             "damage_taken": round(damage_taken, 1),
+            "allies": ally_names,
+            "target_allies": target_ally_names,
             "target_alive": not target_killed,
-        })]
+        }))
 
+        # ── 장비 파괴 (전투 후) ──
+        for item in list(self.equipped):
+            if random.random() < config.EQUIPMENT_BREAK_CHANCE:
+                self.equipped.remove(item)
+                events.append(self._event("equipment_broken", {
+                    "item": item,
+                }))
         if target_killed:
+            for item in list(target.equipped):
+                if random.random() < config.EQUIPMENT_BREAK_CHANCE:
+                    target.equipped.remove(item)
+
+        # ── 승리: 약탈 ──
+        if target_killed:
+            # 인벤토리 약탈
             loot = {}
             for rtype, amount in target.inventory.items():
                 loot_qty = amount * config.COMBAT_WINNER_LOOT_RATIO
@@ -590,6 +599,27 @@ class Entity:
                 "target": target.name,
                 "loot": loot,
             }))
+
+            # 장비 약탈 (확률적)
+            if target.equipped and random.random() < config.COMBAT_EQUIPMENT_LOOT_CHANCE:
+                stolen_item = random.choice(target.equipped)
+                target.equipped.remove(stolen_item)
+                if len(self.equipped) < 3:  # 장비 슬롯 제한
+                    self.equipped.append(stolen_item)
+                    events.append(self._event("equipment_loot", {
+                        "item": stolen_item,
+                        "from": target.name,
+                    }))
+
+            # 지식 약탈 (확률적)
+            if (target.knowledge.count() > 0
+                    and random.random() < config.COMBAT_KNOWLEDGE_LOOT_CHANCE):
+                stolen_knowledge = random.choice(list(target.knowledge.known))
+                self.knowledge.learn(stolen_knowledge)
+                events.append(self._event("knowledge_loot", {
+                    "tech": stolen_knowledge,
+                    "from": target.name,
+                }))
 
         return events
 
@@ -614,21 +644,26 @@ class Entity:
             self.reproduction_cooldown -= 1
 
     def apply_knowledge_effects(self) -> None:
-        """보유 기술 효과 적용."""
-        bonuses = {
-            "defense": 0,
-            "sociability": 0,
-        }
-        for tech_name in self.knowledge.known:
-            from .config import TECH_TREE
-            for tdef in TECH_TREE:
-                if tdef.name == tech_name:
-                    effect = tdef.effect
-                    if "defense" in effect:
-                        self.defense += effect["defense"]
-                    if "sociability" in effect:
-                        # 적용을 genome에 직접 하지는 않고 getter에서 처리
-                        pass
+        """보유 기술 효과를 개체 속성에 적용.
+        기술 습득 시점에 한 번 호출. 전투/행동 시에는 get_combined_effects() 사용.
+        """
+        effects = self.get_combined_effects()
+        # 방어력
+        if "defense" in effects:
+            self.defense = config.BASE_DEFENSE + 5.0 * self.genome.endurance
+            self.defense += effects["defense"]
+        # 공격력
+        if "attack" in effects:
+            self.attack = config.BASE_ATTACK + 10.0 * self.genome.strength
+            self.attack += effects["attack"]
+        # 최대 에너지
+        if "max_energy" in effects:
+            base = config.BASE_MAX_ENERGY * (0.7 + 0.6 * self.genome.endurance)
+            self.max_energy = base + effects["max_energy"]
+            self.energy = min(self.energy, self.max_energy)
+        # 최대 인벤토리
+        if "max_inventory" in effects:
+            self.max_inventory_slots = config.BASE_INVENTORY_SLOTS + int(effects["max_inventory"])
 
     def status_summary(self) -> str:
         """한 줄 상태 요약."""

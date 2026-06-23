@@ -141,25 +141,41 @@ class TechDef:
     discovery_cost: int           # 필요한 연구 포인트
     effect: dict                  # 적용 효과
 
+# 연구 포인트 생성 계수
+RESEARCH_POINT_BASE_RATE = 0.1        # innovation_rate * 이 값이 기본 생성량
+RESEARCH_POINT_PER_KNOWLEDGE = 0.15   # 보유 지식 하나당 추가 계수
+RESEARCH_FOCUS_THRESHOLD = 0.6        # 집중 연구 확률 (1.0=항상 집중, 0.0=항상 분산)
+
 TECH_TREE: list[TechDef] = [
-    TechDef("basic_agriculture", "농업 기초 - 식량 생산 +1/tick",
-            [], 20, {"gather_food": 1.5}),
-    TechDef("mining", "채광 기술 - 돌/철 생산 +1/tick",
-            [], 20, {"gather_stone": 1.5, "gather_iron": 1.5}),
-    TechDef("metallurgy", "야금술 - 철 도구 제작 가능",
-            ["mining"], 40, {"craft_iron_sword": True}),
-    TechDef("currency", "화폐 도입 - 시장 효율 +20%",
-            ["basic_agriculture"], 30, {"trade_efficiency": 0.2}),
-    TechDef("irrigation", "관개 - 모든 농업 생산 +50%",
-            ["basic_agriculture"], 35, {"gather_food": 2.0}),
-    TechDef("architecture", "건축 - 방어력 +3",
-            ["mining"], 30, {"defense": 3.0}),
-    TechDef("alchemy", "연금술 - 금 가치 2배",
-            ["metallurgy"], 50, {"gold_value_mult": 2.0}),
-    TechDef("sailing", "항해 - 물 타일 통과 가능",
-            ["basic_agriculture"], 25, {"cross_water": True}),
-    TechDef("bureaucracy", "관료제 - 조직 결성 가능",
-            ["currency"], 40, {"organization": True}),
+    # ── Tier 1 (선행 조건 없음, 비용 50) ──
+    TechDef("basic_agriculture", "농업 기초 - 식량 채집 효율 1.5배, 식량 최대 보유량 +5",
+            [], 50, {"gather_food": 1.5, "max_food_storage": 5.0}),
+    TechDef("mining", "채광 기술 - 돌/철 채집 효율 1.5배, 인벤토리 +2칸",
+            [], 50, {"gather_stone": 1.5, "gather_iron": 1.5, "max_inventory": 2}),
+    TechDef("survival", "생존 기술 - 최대 에너지 +20, 에너지 소비 -10%",
+            [], 40, {"max_energy": 20.0, "energy_efficiency": 0.1}),
+
+    # ── Tier 2 (선행 1개 필요, 비용 70~80) ──
+    TechDef("irrigation", "관개 농업 - 식량 채집 효율 2.5배, 식량 1당 에너지 회복량 +50%",
+            ["basic_agriculture"], 80, {"gather_food": 2.5, "food_energy_mult": 1.5}),
+    TechDef("currency", "화폐 도입 - 시장 거래 수수료 절반, 자원 매매 자동화",
+            ["basic_agriculture"], 70, {"trade_efficiency": 0.4, "market_tax_discount": 0.5}),
+    TechDef("sailing", "항해술 - 물 타일 통과 가능, 탐험 시 추가 이동 거리 +1",
+            ["basic_agriculture"], 60, {"cross_water": True, "explore_range": 1}),
+    TechDef("architecture", "건축술 - 방어력 +5, 영토 전투 보정 +20%",
+            ["mining"], 70, {"defense": 5.0, "home_bonus_extra": 0.2}),
+    TechDef("weapon_smithing", "무기 제작 - 공격력 +5, 돌도끼/철검 성능 2배",
+            ["mining"], 60, {"attack": 5.0, "craft_weapon_boost": True}),
+
+    # ── Tier 3 (선행 2개 필요, 비용 100~130) ──
+    TechDef("metallurgy", "야금술 - 철제 장비 제작 가능, 돌/철 채집 효율 2배",
+            ["mining", "weapon_smithing"], 100, {"craft_iron": True, "gather_stone": 2.0, "gather_iron": 2.0}),
+    TechDef("bureaucracy", "관료제 - 파벌 결속력 +0.2, 파벌 최대 인원 +10, 전쟁 시 사기 보정",
+            ["currency"], 100, {"faction_cohesion": 0.2, "faction_max_members": 10, "faction_morale": 0.15}),
+
+    # ── Tier 4 (선행 2+개, 비용 140) ──
+    TechDef("alchemy", "연금술 - 금 가치 3배, 금 거래 보너스, 금 장식 효과 2배",
+            ["metallurgy", "currency"], 140, {"gold_value_mult": 3.0, "trade_gold_bonus": 0.3, "gold_ornament_boost": True}),
 ]
 
 
@@ -168,6 +184,44 @@ TECH_TREE: list[TechDef] = [
 # ──────────────────────────────────────────────
 METRICS_SNAPSHOT_INTERVAL = 10   # n틱마다 스냅샷 저장
 WORLD_LOG_INTERVAL = 50          # n틱마다 월드 상태 로그
+
+
+# ──────────────────────────────────────────────
+# 파벌 (Faction)
+# ──────────────────────────────────────────────
+FACTION_ENABLED = True
+FACTION_FORMATION_SOCIABILITY = 0.55  # 파벌 결성에 필요한 최소 사회성
+FACTION_FORMATION_RADIUS = 5          # 같은 파벌로 결성될 최대 거리 (맨해튼)
+FACTION_FORMATION_MIN_MEMBERS = 3     # 파벌 결성에 필요한 최소 인원
+FACTION_FORMATION_TICKS = 20          # 이 틱 이상 함께 있어야 결성
+FACTION_MAX_MEMBERS = 15              # 파벌 최대 인원
+FACTION_ALLY_SUPPORT_RADIUS = 3       # 전투 시 동맹 지원 반경
+FACTION_ALLY_COMBAT_BONUS = 0.15      # 동맹 지원 시 공/방 15% 보정
+FACTION_TERRITORY_RADIUS = 5          # 파벌 영토 반경 (지도자 기준)
+FACTION_COHESION_BREAKUP = 0.3        # 결속력이 이 아래면 파벌 해체 위험
+FACTION_WAR_DURATION = 50             # 선언 후 자동 종료까지 틱
+
+
+# ──────────────────────────────────────────────
+# 전투 강화
+# ──────────────────────────────────────────────
+EQUIPMENT_BREAK_CHANCE = 0.08         # 전투 후 장비 파괴 확률 8%
+COMBAT_ALLY_CONTRIBUTION = 0.4        # 동맹 지원 시 공격력 기여 비율
+COMBAT_KNOWLEDGE_LOOT_CHANCE = 0.3    # 전사한 적 지식 약탈 확률
+COMBAT_EQUIPMENT_LOOT_CHANCE = 0.2    # 전사한 적 장비 약탈 확률
+COMBAT_PURSUIT_RADIUS = 5             # 승리 후 추격 반경
+COMBAT_RETREAT_THRESHOLD = 0.25       # 에너지 비율 이하면 후퇴
+
+
+# ──────────────────────────────────────────────
+# SmartBrain — 듀얼 브레인 시스템
+# ──────────────────────────────────────────────
+SMART_BRAIN_RATIO = 0.25          # 전체 개체 중 SmartBrain 비율 (0.25 = 25%)
+SMART_MEMORY_SIZE = 50            # 각 SmartBrain이 기억하는 최근 경험 수
+SMART_SIMILARITY_THRESHOLD = 0.7  # 경험 참조를 위한 상태 유사도 임계값
+SMART_PLANNING_RATE = 0.3         # 멀티스텝 계획 시도 확률 (매 결정마다)
+SMART_PLANNING_DISCOUNT = 0.6     # 미래 액션 점수 할인율 (0~1, 높을수록 미래 중시)
+SMART_LEARNING_RATE = 0.1         # 경험 보정의 학습률 (너무 높으면 불안정)
 
 
 # ──────────────────────────────────────────────
