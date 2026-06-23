@@ -59,20 +59,21 @@ class Genome:
         "loyalty",
     ]
 
-    def mutate(self) -> Genome:
+    def mutate(self, rng: random.Random | None = None) -> Genome:
         """돌연변이: 설정된 확률/크기로 유전자 무작위 변경."""
+        rng = rng or random
         child = copy.deepcopy(self)
         child.generation = self.generation + 1
 
         for trait in self._trait_names:
-            if random.random() < config.MUTATION_RATE:
-                delta = random.uniform(-config.MUTATION_MAGNITUDE,
-                                       config.MUTATION_MAGNITUDE)
+            if rng.random() < config.MUTATION_RATE:
+                delta = rng.uniform(-config.MUTATION_MAGNITUDE,
+                                    config.MUTATION_MAGNITUDE)
                 setattr(child, trait, max(0.0, min(1.0, getattr(child, trait) + delta)))
 
         # 직업도 소수 변이
-        if random.random() < config.MUTATION_RATE * 0.5:
-            child.specialization = random.choice(SPECIALIZATIONS)
+        if rng.random() < config.MUTATION_RATE * 0.5:
+            child.specialization = rng.choice(SPECIALIZATIONS)
 
         return child
 

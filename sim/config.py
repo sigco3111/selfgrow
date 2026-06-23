@@ -1,5 +1,6 @@
 """전체 시뮬레이션 파라미터 — 모든 튜너블 상수는 여기서 관리."""
 
+import random
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -288,3 +289,21 @@ BUILDING_DESTROY_CHANCE = 0.05  # 전투/재해 시 건물 파괴 확률
 # ──────────────────────────────────────────────
 TICK_INTERVAL_MS = 100  # 메인 루프 지연 (ms), 0이면 최대 속도
 VISUALIZER_REFRESH_TICKS = 5  # n틱마다 화면 갱신
+
+
+# ──────────────────────────────────────────────
+# RNG 팩토리 — 시드 기반 난수 생성기
+# ──────────────────────────────────────────────
+def create_rng(seed: int | None = None, subsystem: str = "") -> random.Random:
+    """시드 기반 RNG 인스턴스 생성.
+    
+    Args:
+        seed: 기본 시드 (None이면 config.SEED 사용)
+        subsystem: 서브시스템 식별자 (동일 시드여도 서브시스템마다 다른 RNG 보장)
+    """
+    base = seed if seed is not None else SEED
+    if subsystem:
+        # 동일 메인 시드여도 서브시스템별로 다른 RNG 생성
+        sub_seed = hash((base, subsystem)) % (2**31 - 1)
+        return random.Random(sub_seed)
+    return random.Random(base)
