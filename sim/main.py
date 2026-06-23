@@ -1,4 +1,4 @@
-"""CLI 엔트리 포인트 — 시뮬레이션 실행 및 시각화."""
+"""CLI entry point -- simulation runner with cyberpunk TUI."""
 
 from __future__ import annotations
 
@@ -6,9 +6,11 @@ import argparse
 import sys
 import time
 
+from rich.live import Live
+
 from . import config
 from .engine import SimulationEngine
-from .visualizer import TerminalVisualizer
+from .visualizer import TerminalVisualizer, console
 
 
 def run_headless(engine: SimulationEngine, max_ticks: int,
@@ -37,7 +39,7 @@ def run_headless(engine: SimulationEngine, max_ticks: int,
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="자가발전 문명 시뮬레이션 — Phase 0"
+        description="Self-growing civilization simulation - Phase 0"
     )
     parser.add_argument(
         "--ticks", type=int, default=500,
@@ -67,17 +69,14 @@ def main() -> None:
     args = parser.parse_args()
     headless = args.no_visual
 
-    print("\033[1;36m")
-    print("  +----------------------------------------+")
-    print("  |     문명 시뮬레이션 -- Phase 0         |")
-    print("  |     자가발전하는 생태계                |")
-    print("  +----------------------------------------+")
-    print("\033[0m")
-    print(f"  월드: {config.WORLD_WIDTH}×{config.WORLD_HEIGHT}")
-    print(f"  초기 개체: {config.INITIAL_ENTITY_COUNT}")
-    print(f"  최대 틱: {args.ticks}")
-    print(f"  시드: {args.seed or config.SEED}")
-    print()
+    console.print()
+    console.rule("[cp.magenta]\u26a1 SELF-GROWING CIVILIZATION [cp.cyan]Phase 0[/][/]")
+    console.print()
+    console.print(f"  [cp.dim]World:[/]  {config.WORLD_WIDTH}\u00d7{config.WORLD_HEIGHT}")
+    console.print(f"  [cp.dim]Entities:[/] {config.INITIAL_ENTITY_COUNT}")
+    console.print(f"  [cp.dim]Max Ticks:[/] {args.ticks}")
+    console.print(f"  [cp.dim]Seed:[/]     {args.seed or config.SEED}")
+    console.print()
 
     engine = SimulationEngine(seed=args.seed)
 
@@ -89,35 +88,38 @@ def main() -> None:
     else:
         visualizer = TerminalVisualizer(engine)
         engine.running = True
+        extinction = False
 
         try:
-            for tick in range(1, args.ticks + 1):
-                if not engine.running:
-                    break
+            with Live(console=console, refresh_per_second=8, screen=True) as live:
+                for tick in range(1, args.ticks + 1):
+                    if not engine.running:
+                        break
 
-                engine._step()
+                    engine._step()
 
-                # 주기적으로 화면 갱신
-                if tick % args.interval == 0 or tick == 1:
-                    visualizer.render()
+                    if tick % args.interval == 0 or tick == 1:
+                        live.update(visualizer.render())
 
-                # 속도 제어
-                if args.speed > 0:
-                    delay = config.TICK_INTERVAL_MS / 1000.0 / args.speed
-                    time.sleep(delay)
+                    # 속도 제어
+                    if args.speed > 0:
+                        delay = config.TICK_INTERVAL_MS / 1000.0 / args.speed
+                        time.sleep(delay)
 
-                # 멸종 검사
-                alive = [e for e in engine.world.entities.values() if e.alive]
-                if not alive:
-                    print("\n\033[1;31m☠ 모든 개체가 멸종했습니다.\033[0m")
-                    break
+                    alive = [e for e in engine.world.entities.values() if e.alive]
+                    if not alive:
+                        extinction = True
+                        live.update(visualizer.render())
+                        time.sleep(1.5)
+                        break
 
         except KeyboardInterrupt:
-            print("\n\n사용자 중단.")
+            pass
         finally:
             engine.running = False
 
-        # 최종 통계
+        if extinction:
+            console.print("\n[cp.red]\u2620 ALL ENTITIES HAVE GONE EXTINCT.[/]\n")
         visualizer.render_final_summary(engine.metrics)
 
 
