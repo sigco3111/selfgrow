@@ -35,6 +35,8 @@ class Snapshot:
     total_techs: int
     inventory_distribution: dict[str, float]  # 자원별 총량
     world_resources: dict[str, float]
+    faction_count: int = 0
+    avg_faction_size: float = 0.0
 
 
 class MetricsCollector:
@@ -128,9 +130,14 @@ class MetricsCollector:
             prices=prices,
             discovered_techs=discovered_techs,
             total_techs=total_techs,
-            inventory_distribution=inv_dist,
-            world_resources=world_res,
-        )
+                inventory_distribution=inv_dist,
+                world_resources=world_res,
+                faction_count=len(world.faction_registry),
+                avg_faction_size=(
+                    sum(f.member_count for f in world.faction_registry.values())
+                    / max(1, len(world.faction_registry))
+                ),
+            )
         self.snapshots.append(snap)
         return snap
 

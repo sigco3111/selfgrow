@@ -12,6 +12,7 @@ from collections import defaultdict
 
 if TYPE_CHECKING:
     from .entity import Entity
+    from .faction import Faction
 
 
 class World:
@@ -33,6 +34,13 @@ class World:
 
         # 타일 클레임: (x,y) -> (entity_id, last_claim_tick)
         self.tile_claims: dict[tuple[int, int], tuple[int, int]] = {}
+
+        # 파벌 레지스트리: faction_id -> Faction
+        self.faction_registry: dict[int, Faction] = {}
+
+    @property
+    def faction_count(self) -> int:
+        return len(self.faction_registry)
 
     # ── 지형 생성 ──
     def _generate_terrain(self) -> None:
@@ -67,19 +75,20 @@ class World:
             return False
         return tile.is_traversable()
 
-    def get_neighbors(self, x: int, y: int, include_diagonal: bool = False) -> list[tuple[int, int]]:
-        """인접 타일 좌표 목록."""
+    def get_neighbors(self, x: int, y: int, include_diagonal: bool = False,
+                      filter_traversable: bool = True) -> list[tuple[int, int]]:
+        """인접 타일 좌표 목록. filter_traversable=False면 모든 타일 반환."""
         neighbors = []
         for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
             nx, ny = x + dx, y + dy
             if 0 <= nx < self.width and 0 <= ny < self.height:
-                if self.is_traversable(nx, ny):
+                if not filter_traversable or self.is_traversable(nx, ny):
                     neighbors.append((nx, ny))
         if include_diagonal:
             for dx, dy in [(-1, -1), (-1, 1), (1, -1), (1, 1)]:
                 nx, ny = x + dx, y + dy
                 if 0 <= nx < self.width and 0 <= ny < self.height:
-                    if self.is_traversable(nx, ny):
+                    if not filter_traversable or self.is_traversable(nx, ny):
                         if (nx, ny) not in neighbors:
                             neighbors.append((nx, ny))
         return neighbors

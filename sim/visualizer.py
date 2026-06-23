@@ -187,6 +187,14 @@ class TerminalVisualizer:
                 is_claimed = (x, y) in world.tile_claims
                 entities_at = entity_positions.get((x, y), [])
 
+                # 파벌 영토 색상 오버레이
+                faction_territory_color = None
+                faction_reg = world.faction_registry
+                for fid, faction in faction_reg.items():
+                    if (x, y) in faction.territory:
+                        faction_territory_color = faction.color
+                        break
+
                 if entities_at:
                     count = len(entities_at)
                     first = entities_at[0]
@@ -203,10 +211,19 @@ class TerminalVisualizer:
                         ch = SYM["HT"]
                     else:
                         ch = SYM["SG"]
-                    style = SPEC_STYLES.get(first.genome.specialization, "cp.text")
+                    base_style = SPEC_STYLES.get(first.genome.specialization, "cp.text")
+                    # 파벌 멤버는 파벌 색상으로 표시
+                    if first.faction_id >= 0 and faction_territory_color:
+                        style = faction_territory_color
+                    else:
+                        style = base_style
                     map_text.append(ch, style=style)
                 elif is_claimed:
-                    map_text.append(".", style=Style(dim=True, color="#555555"))
+                    base = Style(dim=True, color="#555555")
+                    if faction_territory_color:
+                        map_text.append(".", style=Style(dim=True, color="#888888"))
+                    else:
+                        map_text.append(".", style=base)
                 else:
                     biome = tile.biome.value
                     t_style = TILE_STYLES.get(biome, "cp.dim")
@@ -305,6 +322,32 @@ class TerminalVisualizer:
             Panel(tech, title="[cp.cyan]\U0001f4a1 Tech Tree[/]", box=ROUNDED, border_style="cp.dim")
         )
 
+        # -- Factions --
+        faction_reg = world.faction_registry
+        if faction_reg:
+            fac = Table.grid(padding=(0, 2))
+            fac.add_column(style="cp.dim", width=14)
+            fac.add_column(style="cp.text")
+            fac.add_row("Factions", f"{len(faction_reg)}")
+            for fid, f in sorted(faction_reg.items()):
+                leader = world.entities.get(f.leader_id)
+                leader_name = leader.name if leader else "?"
+                fac.add_row(
+                    f"  [{f.color}]{f.name}[/]",
+                    f"n={f.member_count} {f.total_kills}k "
+                    f"l={leader_name[:10]}"
+                    f"{' [WAR]' if f.wars else ''}",
+                )
+            groups.append(
+                Panel(fac, title="[cp.red]\U0001f525 Factions[/]", box=ROUNDED, border_style="cp.dim")
+            )
+        else:
+            fac = Panel(
+                Text("(no factions yet)", style="cp.dim"),
+                title="[cp.red]\U0001f525 Factions[/]", box=ROUNDED, border_style="cp.dim"
+            )
+            groups.append(fac)
+
         # -- Market --
         mkt = Table.grid(padding=(0, 2))
         mkt.add_column(style="cp.dim", width=14)
@@ -348,6 +391,11 @@ class TerminalVisualizer:
             "combat",
             "craft",
             "loot",
+            "faction_formed",
+            "faction_disbanded",
+            "knowledge_loot",
+            "equipment_loot",
+            "equipment_broken",
         }
         recent = [e for e in reversed(events) if e.get("type") in important_types][:6]
 
@@ -419,6 +467,51 @@ class TerminalVisualizer:
                     (f"{SYM['HM']} ", "cp.blue"),
                     (f"{name}", "cp.text"),
                     (f" {SYM['AR']} {item}", "cp.cyan"),
+                )
+            elif etype == "faction_formed":
+                f_name = data.get("faction", "?")
+                leader = data.get("leader", "?")
+                n = data.get("members", 0)
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\u26a1 ", "cp.red"),
+                    (f"{f_name}", "cp.red"),
+                    (f" formed ({n} members, leader: {leader})", "cp.text"),
+                )
+            elif etype == "faction_disbanded":
+                f_name = data.get("faction", "?")
+                reason = data.get("reason", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\u2620 ", "cp.red"),
+                    (f"{f_name}", "cp.red"),
+                    (f" disbanded ({reason})", "cp.dim"),
+                )
+            elif etype == "knowledge_loot":
+                tech = data.get("tech", "?")
+                source = data.get("from", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\U0001f4da ", "cp.cyan"),
+                    (f"{name}", "cp.text"),
+                    (f" looted {tech} from {source}", "cp.cyan"),
+                )
+            elif etype == "equipment_loot":
+                item = data.get("item", "?")
+                source = data.get("from", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\u2694 ", "cp.amber"),
+                    (f"{name}", "cp.text"),
+                    (f" took {item} from {source}", "cp.amber"),
+                )
+            elif etype == "equipment_broken":
+                item = data.get("item", "?")
+                t = Text.assemble(
+                    (f"[{tick}] ", "cp.dim"),
+                    ("\U0001f4a5 ", "cp.red"),
+                    (f"{name}", "cp.text"),
+                    (f" {item} broke!", "cp.red"),
                 )
             else:
                 t = Text(f"[{tick}] {etype}: {name} {data}", style="cp.dim")
