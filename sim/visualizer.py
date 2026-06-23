@@ -1,4 +1,4 @@
-"""사이버펑크 TUI -- Rich 기반 실시간 시뮬레이션 시각화."""
+"""웜 컴포트 TUI -- Rich 기반 실시간 시뮬레이션 시각화 (저채도 웜톤 팔레트)."""
 
 from __future__ import annotations
 
@@ -32,26 +32,26 @@ if sys.platform == "win32":
 
 
 # ----------------------------------------------
-# Cyberpunk Color Theme
+# Warm Comfort Color Theme (눈에 편안한 저채도 웜톤 팔레트)
 # ----------------------------------------------
-CYBERPUNK_THEME = Theme(
+COMFORT_THEME = Theme(
     {
-        "cp.magenta": "bold #ff00ff",
-        "cp.cyan": "bold #00ffff",
-        "cp.green": "bold #00ff41",
-        "cp.amber": "bold #ffb000",
-        "cp.red": "bold #ff003c",
-        "cp.blue": "bold #0088ff",
-        "cp.purple": "bold #aa00ff",
-        "cp.dim": "#555555",
-        "cp.text": "#c0c0c0",
-        "cp.white": "bold #ffffff",
-        "cp.pink": "#ff66aa",
+        "cp.magenta": "#cba6f7",   # soft lavender  (was bold #ff00ff)
+        "cp.cyan": "#89dceb",      # soft sky       (was bold #00ffff)
+        "cp.green": "#a6e3a1",     # soft green     (was bold #00ff41)
+        "cp.amber": "#fab387",     # warm peach     (was bold #ffb000)
+        "cp.red": "#f38ba8",       # soft coral     (was bold #ff003c)
+        "cp.blue": "#89b4fa",      # soft blue      (was bold #0088ff)
+        "cp.purple": "#b4befe",    # soft periwinkle (was bold #aa00ff)
+        "cp.dim": "#585b70",       # muted warm gray (was #555555)
+        "cp.text": "#cdd6f4",      # off-white      (was #c0c0c0)
+        "cp.white": "#f5e0dc",     # warm white     (was bold #ffffff)
+        "cp.pink": "#f5c2e7",      # soft pink      (was #ff66aa)
     }
 )
 
 console = Console(
-    theme=CYBERPUNK_THEME,
+    theme=COMFORT_THEME,
     legacy_windows=False,
     force_terminal=True,
     highlight=False,
@@ -85,11 +85,11 @@ SPEC_STYLES: dict[str, str] = {
 # -- Biome -> tile style mapping --
 TILE_STYLES: dict[str, str] = {
     "plain": "cp.green",
-    "forest": "green",
+    "forest": "#8bd5ca",      # soft teal (was harsh "green")
     "mountain": "cp.white",
     "water": "cp.blue",
     "desert": "cp.amber",
-    "hill": "yellow",
+    "hill": "#eed49f",        # soft warm yellow (was harsh "yellow")
     "swamp": "cp.dim",
 }
 
@@ -105,7 +105,7 @@ TILE_CHARS: dict[str, str] = {
 
 
 class TerminalVisualizer:
-    """사이버펑크 TUI 시각화 -- Rich Layout 기반."""
+    """웜 컴포트 TUI 시각화 -- Rich Layout 기반 (저채도 웜톤 팔레트)."""
 
     def __init__(self, engine: SimulationEngine):
         self.engine = engine
@@ -141,11 +141,11 @@ class TerminalVisualizer:
     # ------------------------------------------
     def _render_header(self, state) -> Panel:
         """네온 타이틀 바."""
-        tick_str = f"TICK {state.tick:05d}"
-        pop_str = f"POP {state.alive_count}/{state.population}"
+        tick_str = f"틱 {state.tick:05d}"
+        pop_str = f"생존 {state.alive_count}/{state.population}"
         title = Text.assemble(
             (">> ", "cp.cyan"),
-            ("SELF-GROWING CIVILIZATION", "cp.magenta"),
+            ("자가발전 문명", "cp.magenta"),
             ("  v0.1", "cp.dim"),
         )
         status = Text.assemble(
@@ -219,9 +219,9 @@ class TerminalVisualizer:
                         style = base_style
                     map_text.append(ch, style=style)
                 elif is_claimed:
-                    base = Style(dim=True, color="#555555")
+                    base = Style(dim=True, color="#585b70")
                     if faction_territory_color:
-                        map_text.append(".", style=Style(dim=True, color="#888888"))
+                        map_text.append(".", style=Style(dim=True, color="#6c7086"))
                     else:
                         map_text.append(".", style=base)
                 else:
@@ -234,7 +234,7 @@ class TerminalVisualizer:
 
         return Panel(
             map_text,
-            title=Text.assemble(("[M]", "cp.cyan"), (" WORLD MAP", "cp.cyan")),
+            title=Text.assemble(("[M]", "cp.cyan"), (" 월드 맵", "cp.cyan")),
             box=ROUNDED,
             border_style="cp.green",
             padding=(0, 1),
@@ -256,18 +256,18 @@ class TerminalVisualizer:
         econ.add_column(style="cp.dim", width=14)
         econ.add_column(style="cp.text")
         if snap:
-            econ.add_row("Gini Coeff", f"{snap.gini_coefficient:.4f}")
-            econ.add_row("Diversity", f"{snap.specialization_diversity:.4f}")
-            econ.add_row("Avg Wealth", f"{snap.avg_wealth:.1f}")
-            econ.add_row("Trade Vol.", f"{snap.trade_volume:.1f}")
-            econ.add_row("Taxes", f"{snap.total_taxes:.2f}")
+            econ.add_row("지니계수", f"{snap.gini_coefficient:.4f}")
+            econ.add_row("분업지수", f"{snap.specialization_diversity:.4f}")
+            econ.add_row("평균 부", f"{snap.avg_wealth:.1f}")
+            econ.add_row("거래량", f"{snap.trade_volume:.1f}")
+            econ.add_row("세금", f"{snap.total_taxes:.2f}")
         prices = market.market_summary()["prices"]
         price_items = "  ".join(
             f"[cp.green]{k}[/]:{v:.1f}" for k, v in prices.items()
         )
-        econ.add_row("Prices", price_items)
+        econ.add_row("가격", price_items)
         groups.append(
-            Panel(econ, title="[cp.amber][+] Economy[/]", box=ROUNDED, border_style="cp.dim")
+            Panel(econ, title="[cp.amber][+] 경제[/]", box=ROUNDED, border_style="cp.dim")
         )
 
         # -- Population --
@@ -275,19 +275,19 @@ class TerminalVisualizer:
         pop.add_column(style="cp.dim", width=14)
         pop.add_column(style="cp.text")
         if snap:
-            pop.add_row("Population", f"{snap.population}")
-            pop.add_row("Births", f"[cp.green]{snap.births}[/]")
-            pop.add_row("Deaths", f"[cp.red]{snap.deaths}[/]")
-            pop.add_row("Combat Kills", f"[cp.red]{snap.kill_count}[/]")
-            pop.add_row("Avg Energy", f"{snap.avg_energy:.1f}")
+            pop.add_row("인구", f"{snap.population}")
+            pop.add_row("출생", f"[cp.green]{snap.births}[/]")
+            pop.add_row("사망", f"[cp.red]{snap.deaths}[/]")
+            pop.add_row("전투 사망", f"[cp.red]{snap.kill_count}[/]")
+            pop.add_row("평균 에너지", f"{snap.avg_energy:.1f}")
         claimed_tiles = len(world.tile_claims)
         home_owners = sum(
             1
             for e in world.entities.values()
             if e.alive and hasattr(e, "home_x") and e.home_x is not None
         )
-        pop.add_row("Claims", f"{claimed_tiles}")
-        pop.add_row("Homeowners", f"{home_owners}")
+        pop.add_row("영토", f"{claimed_tiles}")
+        pop.add_row("주택", f"{home_owners}")
 
         spec_counts: dict[str, int] = {}
         for e in world.entities.values():
@@ -298,9 +298,9 @@ class TerminalVisualizer:
             f"[{SPEC_STYLES.get(k, 'cp.text')}]{k[:3]}[/]:{v}"
             for k, v in sorted(spec_counts.items())
         )
-        pop.add_row("Spec", spec_items)
+        pop.add_row("직업", spec_items)
         groups.append(
-            Panel(pop, title="[cp.cyan][~] Population[/]", box=ROUNDED, border_style="cp.dim")
+            Panel(pop, title="[cp.cyan][~] 인구[/]", box=ROUNDED, border_style="cp.dim")
         )
 
         # -- Tech --
@@ -310,16 +310,16 @@ class TerminalVisualizer:
         tech_tree = self.engine.tech_tree
         discovered = tech_tree.get_discovered()
         tech.add_row(
-            "Progress",
+            "진척도",
             f"[cp.cyan]{len(discovered)}[/][cp.dim]/[/][cp.cyan]{tech_tree.total_count()}[/]",
         )
         if discovered:
             tech_names = ", ".join(
                 f"[cp.green]{t.name}[/]" for t in discovered[-5:]
             )
-            tech.add_row("Recent", tech_names)
+            tech.add_row("최근", tech_names)
         groups.append(
-            Panel(tech, title="[cp.cyan]\U0001f4a1 Tech Tree[/]", box=ROUNDED, border_style="cp.dim")
+            Panel(tech, title="[cp.cyan]\U0001f4a1 기술 트리[/]", box=ROUNDED, border_style="cp.dim")
         )
 
         # -- Factions --
@@ -328,7 +328,7 @@ class TerminalVisualizer:
             fac = Table.grid(padding=(0, 2))
             fac.add_column(style="cp.dim", width=14)
             fac.add_column(style="cp.text")
-            fac.add_row("Factions", f"{len(faction_reg)}")
+            fac.add_row("파벌", f"{len(faction_reg)}")
             for fid, f in sorted(faction_reg.items()):
                 leader = world.entities.get(f.leader_id)
                 leader_name = leader.name if leader else "?"
@@ -339,33 +339,87 @@ class TerminalVisualizer:
                     f"{' [WAR]' if f.wars else ''}",
                 )
             groups.append(
-                Panel(fac, title="[cp.red]\U0001f525 Factions[/]", box=ROUNDED, border_style="cp.dim")
+                Panel(fac, title="[cp.red]\U0001f525 파벌[/]", box=ROUNDED, border_style="cp.dim")
             )
         else:
             fac = Panel(
-                Text("(no factions yet)", style="cp.dim"),
-                title="[cp.red]\U0001f525 Factions[/]", box=ROUNDED, border_style="cp.dim"
+                Text("(파벌 없음)", style="cp.dim"),
+                title="[cp.red]\U0001f525 파벌[/]", box=ROUNDED, border_style="cp.dim"
             )
             groups.append(fac)
+
+        # -- Brain Comparison --
+        brain_panel = self._render_brain_panel(snap)
+        groups.append(brain_panel)
 
         # -- Market --
         mkt = Table.grid(padding=(0, 2))
         mkt.add_column(style="cp.dim", width=14)
         mkt.add_column(style="cp.text")
         summary = market.market_summary()
-        mkt.add_row("Buy Orders", f"{summary['open_buy_orders']}")
-        mkt.add_row("Sell Orders", f"{summary['open_sell_orders']}")
-        mkt.add_row("Trades", f"{summary['total_trades']}")
+        mkt.add_row("매수 주문", f"{summary['open_buy_orders']}")
+        mkt.add_row("매도 주문", f"{summary['open_sell_orders']}")
+        mkt.add_row("체결", f"{summary['total_trades']}")
         groups.append(
-            Panel(mkt, title="[cp.purple]\U0001f4b1 Market[/]", box=ROUNDED, border_style="cp.dim")
+            Panel(mkt, title="[cp.purple]\U0001f4b1 시장[/]", box=ROUNDED, border_style="cp.dim")
         )
 
         return Panel(
             Group(*groups),
-            title=Text.assemble(("\u2699", "cp.magenta"), (" STATUS", "cp.magenta")),
+            title=Text.assemble(("\u2699", "cp.magenta"), (" 상태", "cp.magenta")),
             box=ROUNDED,
             border_style="cp.magenta",
             padding=(0, 1),
+        )
+
+    # ------------------------------------------
+    # Brain Comparison Panel
+    # ------------------------------------------
+    def _render_brain_panel(self, snap) -> Panel:
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(style="cp.dim", width=14)
+        grid.add_column(style="cp.text")
+
+        if snap and snap.population > 0:
+            total = snap.smart_count + snap.rule_count
+            smart_pct = snap.smart_count / total * 100 if total > 0 else 0
+            rule_pct = snap.rule_count / total * 100 if total > 0 else 0
+
+            # SmartBrain
+            grid.add_row("[cp.cyan]SmartBrain[/]", "")
+            grid.add_row("  인원", f"{snap.smart_count}명 ([cp.green]{smart_pct:.1f}%[/])")
+            grid.add_row("  평균 부", f"{snap.smart_avg_wealth:.1f}")
+            grid.add_row("  평균 에너지", f"{snap.smart_avg_energy:.1f}")
+            grid.add_row("  총 킬", f"{snap.smart_total_kills}")
+            if snap.smart_count > 0:
+                grid.add_row("  1인당 킬", f"{snap.smart_total_kills / snap.smart_count:.2f}")
+            grid.add_row("", "")
+
+            # RuleBasedBrain
+            grid.add_row("[cp.text]RuleBased[/]", "")
+            grid.add_row("  인원", f"{snap.rule_count}명 ([cp.green]{rule_pct:.1f}%[/])")
+            grid.add_row("  평균 부", f"{snap.rule_avg_wealth:.1f}")
+            grid.add_row("  평균 에너지", f"{snap.rule_avg_energy:.1f}")
+            grid.add_row("  총 킬", f"{snap.rule_total_kills}")
+            if snap.rule_count > 0:
+                grid.add_row("  1인당 킬", f"{snap.rule_total_kills / snap.rule_count:.2f}")
+
+            # 격차 (SmartBrain - RuleBased)
+            grid.add_row("", "")
+            wealth_gap = snap.smart_avg_wealth - snap.rule_avg_wealth
+            gap_style = "cp.green" if wealth_gap >= 0 else "cp.red"
+            grid.add_row("  부 격차", f"[{gap_style}]{wealth_gap:+.1f}[/]")
+            energy_gap = snap.smart_avg_energy - snap.rule_avg_energy
+            gap_style_e = "cp.green" if energy_gap >= 0 else "cp.red"
+            grid.add_row("  에너지 격차", f"[{gap_style_e}]{energy_gap:+.1f}[/]")
+        else:
+            grid.add_row("데이터 없음", "")
+
+        return Panel(
+            grid,
+            title="[cp.cyan]\U0001f9e0 두뇌 비교[/]",
+            box=ROUNDED,
+            border_style="cp.dim",
         )
 
     # ------------------------------------------
@@ -376,8 +430,8 @@ class TerminalVisualizer:
         events = self.engine.event_log
         if not events:
             return Panel(
-                Text("(no events yet)", style="cp.dim"),
-                title="[cp.amber]\U0001f4dd Event Log[/]",
+                Text("(이벤트 없음)", style="cp.dim"),
+                title="[cp.amber]\U0001f4dd 이벤트 로그[/]",
                 box=ROUNDED,
                 border_style="cp.amber",
                 padding=(0, 1),
@@ -423,14 +477,14 @@ class TerminalVisualizer:
                         (f"{SYM['HR']} ", "cp.pink"),
                         (f"{name}", "cp.text"),
                         (f" {SYM['AR']} {child}", "cp.green"),
-                        (" (asexual)", "cp.dim"),
+                        (" (단성생식)", "cp.dim"),
                     )
             elif etype == "starvation":
                 t = Text.assemble(
                     (f"[{tick}] ", "cp.dim"),
                     (f"{SYM['SK']} ", "cp.red"),
                     (f"{name}", "cp.text"),
-                    (" -- starved", "cp.red"),
+                    (" -- 굶어 죽음", "cp.red"),
                 )
             elif etype == "tech_discovery":
                 tech = data.get("tech", "?")
@@ -438,14 +492,14 @@ class TerminalVisualizer:
                     (f"[{tick}] ", "cp.dim"),
                     (f"{SYM['ST']} ", "cp.cyan"),
                     (f"{tech}", "cp.cyan"),
-                    (" discovered!", "cp.green"),
+                    (" 발견!", "cp.green"),
                 )
             elif etype == "combat":
                 target = data.get("target", "?")
                 dmg = data.get("damage_dealt", "?")
                 taken = data.get("damage_taken", 0)
                 target_alive = data.get("target_alive", True)
-                status = "" if target_alive else " KILL"
+                status = "" if target_alive else " 처치"
                 t = Text.assemble(
                     (f"[{tick}] ", "cp.dim"),
                     ("@ ", "cp.red"),
@@ -458,7 +512,7 @@ class TerminalVisualizer:
                 loot_str = ", ".join(f"{k}:{v}" for k, v in loot.items())
                 t = Text.assemble(
                     (f"[{tick}] ", "cp.dim"),
-                    (f"   loot: {loot_str}", "cp.amber"),
+                    (f"   약탈: {loot_str}", "cp.amber"),
                 )
             elif etype == "craft":
                 item = data.get("item", "?")
@@ -476,7 +530,7 @@ class TerminalVisualizer:
                     (f"[{tick}] ", "cp.dim"),
                     ("\u26a1 ", "cp.red"),
                     (f"{f_name}", "cp.red"),
-                    (f" formed ({n} members, leader: {leader})", "cp.text"),
+                    (f" 결성 (인원 {n}, 지도자: {leader})", "cp.text"),
                 )
             elif etype == "faction_disbanded":
                 f_name = data.get("faction", "?")
@@ -485,7 +539,7 @@ class TerminalVisualizer:
                     (f"[{tick}] ", "cp.dim"),
                     ("\u2620 ", "cp.red"),
                     (f"{f_name}", "cp.red"),
-                    (f" disbanded ({reason})", "cp.dim"),
+                    (f" 해체 ({reason})", "cp.dim"),
                 )
             elif etype == "knowledge_loot":
                 tech = data.get("tech", "?")
@@ -494,7 +548,7 @@ class TerminalVisualizer:
                     (f"[{tick}] ", "cp.dim"),
                     ("\U0001f4da ", "cp.cyan"),
                     (f"{name}", "cp.text"),
-                    (f" looted {tech} from {source}", "cp.cyan"),
+                    (f" {tech} 약탈 (from {source})", "cp.cyan"),
                 )
             elif etype == "equipment_loot":
                 item = data.get("item", "?")
@@ -503,7 +557,7 @@ class TerminalVisualizer:
                     (f"[{tick}] ", "cp.dim"),
                     ("\u2694 ", "cp.amber"),
                     (f"{name}", "cp.text"),
-                    (f" took {item} from {source}", "cp.amber"),
+                    (f" {item} 획득 (from {source})", "cp.amber"),
                 )
             elif etype == "equipment_broken":
                 item = data.get("item", "?")
@@ -511,14 +565,14 @@ class TerminalVisualizer:
                     (f"[{tick}] ", "cp.dim"),
                     ("\U0001f4a5 ", "cp.red"),
                     (f"{name}", "cp.text"),
-                    (f" {item} broke!", "cp.red"),
+                    (f" {item} 파괴!", "cp.red"),
                 )
             else:
                 t = Text(f"[{tick}] {etype}: {name} {data}", style="cp.dim")
 
             lines.append(t)
 
-        events_text = Text("\n").join(lines) if lines else Text("(no important events)", style="cp.dim")
+        events_text = Text("\n").join(lines) if lines else Text("(중요 이벤트 없음)", style="cp.dim")
 
         return Panel(
             events_text,
@@ -543,7 +597,7 @@ class TerminalVisualizer:
             Align.center(
                 Text.assemble(
                     ("\u26a1 ", "cp.cyan"),
-                    ("SIMULATION TERMINATED", "cp.magenta"),
+                    ("시뮬레이션 종료", "cp.magenta"),
                     (" \u26a1", "cp.cyan"),
                 )
             ),
@@ -559,27 +613,27 @@ class TerminalVisualizer:
 
         grid.add_section()
         grid.add_row("[cp.cyan]\u2500" * 35 + "[/]", "")
-        grid.add_row("[cp.cyan]POPULATION STATISTICS[/]", "")
+        grid.add_row("[cp.cyan]인구 통계[/]", "")
         grid.add_row("[cp.cyan]\u2500" * 35 + "[/]", "")
-        grid.add_row("Total Ticks", f"{snap.tick}")
-        grid.add_row("Final Population", f"{snap.population}")
-        grid.add_row("Total Births", f"[cp.green]{snap.births}[/]")
-        grid.add_row("Total Deaths", f"[cp.red]{snap.deaths}[/]")
-        grid.add_row("Combat Deaths", f"[cp.red]{snap.kill_count}[/]")
+        grid.add_row("총 틱", f"{snap.tick}")
+        grid.add_row("최종 인구", f"{snap.population}")
+        grid.add_row("총 출생", f"[cp.green]{snap.births}[/]")
+        grid.add_row("총 사망", f"[cp.red]{snap.deaths}[/]")
+        grid.add_row("전투 사망", f"[cp.red]{snap.kill_count}[/]")
 
         grid.add_section()
         grid.add_row("[cp.amber]\u2500" * 35 + "[/]", "")
-        grid.add_row("[cp.amber]ECONOMIC INDICATORS[/]", "")
+        grid.add_row("[cp.amber]경제 지표[/]", "")
         grid.add_row("[cp.amber]\u2500" * 35 + "[/]", "")
-        grid.add_row("Gini Coefficient", f"{snap.gini_coefficient:.4f}")
-        grid.add_row("Diversity Index", f"{snap.specialization_diversity:.4f}")
-        grid.add_row("Average Wealth", f"{snap.avg_wealth:.2f}")
-        grid.add_row("Total Trade Volume", f"{snap.trade_volume:.2f}")
-        grid.add_row("Total Taxes Collected", f"{snap.total_taxes:.2f}")
+        grid.add_row("지니계수", f"{snap.gini_coefficient:.4f}")
+        grid.add_row("분업지수", f"{snap.specialization_diversity:.4f}")
+        grid.add_row("평균 부", f"{snap.avg_wealth:.2f}")
+        grid.add_row("총 거래량", f"{snap.trade_volume:.2f}")
+        grid.add_row("총 세금", f"{snap.total_taxes:.2f}")
 
         grid.add_section()
         grid.add_row("[cp.green]\u2500" * 35 + "[/]", "")
-        grid.add_row("[cp.green]FINAL PRICES[/]", "")
+        grid.add_row("[cp.green]최종 가격[/]", "")
         grid.add_row("[cp.green]\u2500" * 35 + "[/]", "")
         for rtype, price in snap.prices.items():
             grid.add_row(f"  {rtype}", f"{price:.2f}")
@@ -588,14 +642,44 @@ class TerminalVisualizer:
         tech_tree = self.engine.tech_tree
         grid.add_section()
         grid.add_row("[cp.cyan]\u2500" * 35 + "[/]", "")
-        grid.add_row("[cp.cyan]TECHNOLOGY[/]", "")
+        grid.add_row("[cp.cyan]기술[/]", "")
         grid.add_row("[cp.cyan]\u2500" * 35 + "[/]", "")
         grid.add_row(
-            "Discovered",
+            "발견",
             f"[cp.cyan]{tech_tree.discover_count()}[/][cp.dim]/[/][cp.cyan]{tech_tree.total_count()}[/]",
         )
         for tech in tech_tree.get_discovered():
             grid.add_row(f"  {SYM['ST']}", f"[cp.green]{tech.name}[/]")
+
+        # Brain Comparison
+        grid.add_section()
+        grid.add_row("[cp.cyan]\u2500" * 35 + "[/]", "")
+        grid.add_row("[cp.cyan]두뇌 비교 (실험)[/]", "")
+        grid.add_row("[cp.cyan]\u2500" * 35 + "[/]", "")
+        if snap.population > 0:
+            total_brain = snap.smart_count + snap.rule_count
+            def safe_pct(val):
+                return f"{val / total_brain * 100:.1f}%" if total_brain > 0 else "N/A"
+            grid.add_row("", "")
+            grid.add_row("[cp.cyan]SmartBrain[/]", f"{snap.smart_count}명 ({safe_pct(snap.smart_count)})")
+            grid.add_row("  평균 부", f"[cp.green]{snap.smart_avg_wealth:.2f}[/]")
+            grid.add_row("  평균 에너지", f"{snap.smart_avg_energy:.1f}")
+            grid.add_row("  총 킬", f"{snap.smart_total_kills}")
+            grid.add_row("  1인당 킬", f"{snap.smart_total_kills / max(1, snap.smart_count):.2f}")
+            if snap.smart_count > 0:
+                grid.add_row("  총 자산", f"{snap.smart_total_wealth:.2f}")
+            grid.add_row("", "")
+            grid.add_row("[cp.text]RuleBasedBrain[/]", f"{snap.rule_count}명 ({safe_pct(snap.rule_count)})")
+            grid.add_row("  평균 부", f"{snap.rule_avg_wealth:.2f}")
+            grid.add_row("  평균 에너지", f"{snap.rule_avg_energy:.1f}")
+            grid.add_row("  총 킬", f"{snap.rule_total_kills}")
+            grid.add_row("  1인당 킬", f"{snap.rule_total_kills / max(1, snap.rule_count):.2f}")
+            if snap.rule_count > 0:
+                grid.add_row("  총 자산", f"{snap.rule_total_wealth:.2f}")
+            grid.add_row("", "")
+            wealth_gap = snap.smart_avg_wealth - snap.rule_avg_wealth
+            gap_s = "cp.green" if wealth_gap >= 0 else "cp.red"
+            grid.add_row("  [cp.cyan]부 격차[/]", f"[{gap_s}]{wealth_gap:+.2f}[/]")
 
         # Specialization
         spec_counts: dict[str, int] = {}
@@ -606,7 +690,7 @@ class TerminalVisualizer:
                 )
         grid.add_section()
         grid.add_row("[cp.purple]\u2500" * 35 + "[/]", "")
-        grid.add_row("[cp.purple]SPECIALIZATION[/]", "")
+        grid.add_row("[cp.purple]직업 분포[/]", "")
         grid.add_row("[cp.purple]\u2500" * 35 + "[/]", "")
         for spec, count in sorted(spec_counts.items()):
             bar = "\u2588" * count

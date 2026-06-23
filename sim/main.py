@@ -1,4 +1,4 @@
-"""CLI entry point -- simulation runner with cyberpunk TUI."""
+"""CLI entry point -- simulation runner with warm-comfort TUI."""
 
 from __future__ import annotations
 
@@ -70,12 +70,12 @@ def main() -> None:
     headless = args.no_visual
 
     console.print()
-    console.rule("[cp.magenta]\u26a1 SELF-GROWING CIVILIZATION [cp.cyan]Phase 0[/][/]")
+    console.rule("[cp.magenta]\u26a1 자가발전 문명 [cp.cyan]Phase 0[/][/]")
     console.print()
-    console.print(f"  [cp.dim]World:[/]  {config.WORLD_WIDTH}\u00d7{config.WORLD_HEIGHT}")
-    console.print(f"  [cp.dim]Entities:[/] {config.INITIAL_ENTITY_COUNT}")
-    console.print(f"  [cp.dim]Max Ticks:[/] {args.ticks}")
-    console.print(f"  [cp.dim]Seed:[/]     {args.seed or config.SEED}")
+    console.print(f"  [cp.dim]월드:[/]  {config.WORLD_WIDTH}\u00d7{config.WORLD_HEIGHT}")
+    console.print(f"  [cp.dim]개체:[/] {config.INITIAL_ENTITY_COUNT}")
+    console.print(f"  [cp.dim]최대 틱:[/] {args.ticks}")
+    console.print(f"  [cp.dim]시드:[/]     {args.seed or config.SEED}")
     console.print()
 
     engine = SimulationEngine(seed=args.seed)
@@ -119,7 +119,7 @@ def main() -> None:
             engine.running = False
 
         if extinction:
-            console.print("\n[cp.red]\u2620 ALL ENTITIES HAVE GONE EXTINCT.[/]\n")
+            console.print("\n[cp.red]\u2620 모든 개체가 멸종했습니다.[/]\n")
         visualizer.render_final_summary(engine.metrics)
 
 
