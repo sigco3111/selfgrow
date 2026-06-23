@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import config
+from .brain import SmartBrain, RuleBasedBrain
 from .genome import SPECIALIZATIONS
 
 if TYPE_CHECKING:
@@ -37,6 +38,17 @@ class Snapshot:
     world_resources: dict[str, float]
     faction_count: int = 0
     avg_faction_size: float = 0.0
+    # 두뇌 타입별 비교 실험
+    smart_count: int = 0
+    rule_count: int = 0
+    smart_avg_wealth: float = 0.0
+    rule_avg_wealth: float = 0.0
+    smart_avg_energy: float = 0.0
+    rule_avg_energy: float = 0.0
+    smart_total_kills: int = 0
+    rule_total_kills: int = 0
+    smart_total_wealth: float = 0.0
+    rule_total_wealth: float = 0.0
 
 
 class MetricsCollector:
@@ -114,6 +126,14 @@ class MetricsCollector:
         # 월드 자원
         world_res = world.total_resources()
 
+        # 두뇌 타입별 통계
+        smart_ents = [e for e in alive if isinstance(e.brain, SmartBrain)]
+        rule_ents = [e for e in alive if isinstance(e.brain, RuleBasedBrain)]
+        smart_count = len(smart_ents)
+        rule_count = len(rule_ents)
+        smart_kills = sum(e.kill_count for e in smart_ents)
+        rule_kills = sum(e.kill_count for e in rule_ents)
+
         snap = Snapshot(
             tick=tick, population=pop,
             births=self._running_births,
@@ -130,14 +150,24 @@ class MetricsCollector:
             prices=prices,
             discovered_techs=discovered_techs,
             total_techs=total_techs,
-                inventory_distribution=inv_dist,
-                world_resources=world_res,
-                faction_count=len(world.faction_registry),
-                avg_faction_size=(
-                    sum(f.member_count for f in world.faction_registry.values())
-                    / max(1, len(world.faction_registry))
-                ),
-            )
+            inventory_distribution=inv_dist,
+            world_resources=world_res,
+            faction_count=len(world.faction_registry),
+            avg_faction_size=(
+                sum(f.member_count for f in world.faction_registry.values())
+                / max(1, len(world.faction_registry))
+            ),
+            smart_count=smart_count,
+            rule_count=rule_count,
+            smart_avg_wealth=round(sum(e.total_wealth() for e in smart_ents) / smart_count, 2) if smart_count else 0.0,
+            rule_avg_wealth=round(sum(e.total_wealth() for e in rule_ents) / rule_count, 2) if rule_count else 0.0,
+            smart_avg_energy=round(sum(e.energy for e in smart_ents) / smart_count, 1) if smart_count else 0.0,
+            rule_avg_energy=round(sum(e.energy for e in rule_ents) / rule_count, 1) if rule_count else 0.0,
+            smart_total_kills=smart_kills,
+            rule_total_kills=rule_kills,
+            smart_total_wealth=round(sum(e.total_wealth() for e in smart_ents), 2) if smart_count else 0.0,
+            rule_total_wealth=round(sum(e.total_wealth() for e in rule_ents), 2) if rule_count else 0.0,
+        )
         self.snapshots.append(snap)
         return snap
 
@@ -183,6 +213,9 @@ class MetricsCollector:
         s = snap or self.latest()
         if s is None:
             return "(데이터 없음)"
+        total = s.smart_count + s.rule_count
+        smart_pct = f"{s.smart_count / total * 100:.1f}%" if total > 0 else "N/A"
+        rule_pct = f"{s.rule_count / total * 100:.1f}%" if total > 0 else "N/A"
         return (
             f"━━━ 틱 {s.tick} ━━━\n"
             f"인구: {s.population} (출생:{s.births} 사망:{s.deaths} 전투사:{s.kill_count})\n"
@@ -190,5 +223,8 @@ class MetricsCollector:
             f"지니계수: {s.gini_coefficient} | 분업지수: {s.specialization_diversity}\n"
             f"총 거래: {s.total_trades} (총량: {s.trade_volume}, 세금: {s.total_taxes})\n"
             f"가격: {s.prices}\n"
-            f"발견 기술: {s.discovered_techs}/{s.total_techs}"
+            f"발견 기술: {s.discovered_techs}/{s.total_techs}\n"
+            f"━━━ 두뇌 비교 ━━━\n"
+            f"SmartBrain: {s.smart_count}명 ({smart_pct}) 평균부 {s.smart_avg_wealth} 에너지 {s.smart_avg_energy} 킬 {s.smart_total_kills}\n"
+            f"RuleBased:  {s.rule_count}명 ({rule_pct}) 평균부 {s.rule_avg_wealth} 에너지 {s.rule_avg_energy} 킬 {s.rule_total_kills}"
         )
