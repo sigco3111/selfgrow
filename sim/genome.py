@@ -46,6 +46,9 @@ class Genome:
     speed: float = 0.5                # 민첩 (이동 속도 보정)
     fertility: float = 0.5            # 생식력 (번식 성공률)
 
+    # ── 사회 형질 (social traits) ──
+    loyalty: float = 0.5              # 충성심 (파벌 결속력, 이탈 방지)
+
     # ── 메타 ──
     generation: int = 0               # 현재 세대 수
 
@@ -53,6 +56,7 @@ class Genome:
         "risk_tolerance", "curiosity", "sociability",
         "aggression", "industry", "innovation_rate",
         "strength", "endurance", "speed", "fertility",
+        "loyalty",
     ]
 
     def mutate(self) -> Genome:
