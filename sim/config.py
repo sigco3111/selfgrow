@@ -228,6 +228,7 @@ TECH_TREE: list[TechDef] = [
 
 # 기술 효과 Lookup 캐시 (O(1) 조회 — get_combined_effects() 최적화)
 TECH_EFFECTS_MAP: dict[str, dict] = {t.name: t.effect for t in TECH_TREE}
+TECH_TREE_MAP: dict[str, TechDef] = {t.name: t for t in TECH_TREE}
 
 
 # ──────────────────────────────────────────────

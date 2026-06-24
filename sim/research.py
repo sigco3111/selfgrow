@@ -21,16 +21,21 @@ def process_research(
 ) -> None:
     """개체들이 연구 포인트를 생성하고 기술에 집중/분산 투자."""
     research_points = 0.0
+    total_innovation = 0.0
     for entity in world.entities.values():
         if not entity.alive:
             continue
         innovation = entity.genome.innovation_rate
         knowledge_count = entity.knowledge.count()
+        effects = entity.get_combined_effects()
+        learning_bonus = 1.0 + effects.get("learning_speed", 0.0)
         points = (
             innovation * config.RESEARCH_POINT_BASE_RATE
             * (1 + knowledge_count * config.RESEARCH_POINT_PER_KNOWLEDGE)
+            * learning_bonus
         )
         research_points += points
+        total_innovation += innovation
 
     if research_points <= 0:
         return

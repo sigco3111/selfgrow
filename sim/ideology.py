@@ -52,6 +52,9 @@ def process_ideology(world: World, rng: random.Random) -> list[dict]:
     for entity in entities:
         if entity.ideology == "none":
             continue
+        effects = entity.get_combined_effects()
+        spread_bonus = effects.get("ideology_spread", 0.0)
+        conv_chance = config.IDEOLOGY_CONVERSION_CHANCE * (1.0 + spread_bonus)
         radius = config.IDEOLOGY_TRANSFER_RADIUS
         for dx in range(-radius, radius + 1):
             for dy in range(-radius, radius + 1):
@@ -63,7 +66,7 @@ def process_ideology(world: World, rng: random.Random) -> list[dict]:
                 for other_eid, other in world.entity_at(nx, ny):
                     if (other.alive and other.eid != entity.eid
                             and other.ideology != entity.ideology
-                            and rng.random() < config.IDEOLOGY_CONVERSION_CHANCE):
+                            and rng.random() < conv_chance):
                         old = other.ideology
                         other.ideology = entity.ideology
                         events.append({

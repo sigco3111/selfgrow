@@ -259,6 +259,29 @@ def save_game(engine: SimulationEngine, path: str) -> None:
             for y in range(engine.world.height)
         ],
     }
+    state["trade_network"] = {
+        "routes": [
+            {
+                "faction_a_id": r.faction_a_id,
+                "faction_b_id": r.faction_b_id,
+                "established_tick": r.established_tick,
+                "volume": r.volume,
+                "efficiency": r.efficiency,
+            }
+            for r in engine.trade_network.routes.values()
+        ],
+        "agreements": [
+            {
+                "faction_a_id": a.faction_a_id,
+                "faction_b_id": a.faction_b_id,
+                "created_tick": a.created_tick,
+                "duration": a.duration,
+                "tax_discount": a.tax_discount,
+            }
+            for a in engine.trade_network.agreements.values()
+        ],
+        "_next_route_id": engine.trade_network._next_route_id,
+    }
     with open(path, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
@@ -315,9 +338,31 @@ def load_game(path: str) -> SimulationEngine:
     engine.world = world
     engine.market = market
     engine._event_rng = event_rng
+    tn_data = data.get("trade_network", {})
     engine.trade_network = __import__(
         "sim.trade_network", fromlist=["get_trade_network"]
     ).get_trade_network()
+    for rd in tn_data.get("routes", []):
+        from .trade_network import TradeRoute
+        route = TradeRoute(
+            faction_a_id=rd["faction_a_id"],
+            faction_b_id=rd["faction_b_id"],
+            established_tick=rd["established_tick"],
+            volume=rd.get("volume", 0.0),
+            efficiency=rd.get("efficiency", 1.0),
+        )
+        engine.trade_network.routes[route.key] = route
+    for ad in tn_data.get("agreements", []):
+        from .trade_network import TradeAgreement
+        agreement = TradeAgreement(
+            faction_a_id=ad["faction_a_id"],
+            faction_b_id=ad["faction_b_id"],
+            created_tick=ad["created_tick"],
+            duration=ad.get("duration", 200),
+            tax_discount=ad.get("tax_discount", 0.3),
+        )
+        engine.trade_network.agreements[agreement.key] = agreement
+    engine.trade_network._next_route_id = tn_data.get("_next_route_id", 0)
     engine.tech_tree = tech_tree
     engine.metrics = MetricsCollector()
     engine.running = False

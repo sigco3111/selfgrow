@@ -17,6 +17,17 @@ def do_combat(entity: Entity, world: World) -> list[dict]:
     events: list[dict] = []
     same_tile_targets = [(eid, e) for eid, e in world.entity_at(entity.x, entity.y)
                          if e is not entity and e.alive]
+    
+    effects = entity.get_combined_effects()
+    ranged_combat = effects.get("ranged_combat", 0.0)
+    if ranged_combat and not same_tile_targets:
+        for eid, e in world.entities_near(entity.x, entity.y, 2):
+            if e is not entity and e.alive:
+                dist = abs(e.x - entity.x) + abs(e.y - entity.y)
+                if dist == 1:
+                    same_tile_targets.append((eid, e))
+                    break
+    
     if not same_tile_targets:
         return []
 
@@ -34,7 +45,6 @@ def do_combat(entity: Entity, world: World) -> list[dict]:
                     allies.append(ent)
 
     # ── 영토 보너스 ──
-    effects = entity.get_combined_effects()
     extra_home_bonus = effects.get("home_bonus_extra", 0.0)
     home_bonus = 1.0
     if entity.home_x is not None:

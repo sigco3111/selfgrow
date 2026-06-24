@@ -263,9 +263,12 @@ class Faction:
 
             # 최소 인원 충족 시 파벌 결성
             if len(cluster) >= config.FACTION_FORMATION_MIN_MEMBERS:
-                # 지도자 = 가장 높은 aggression * strength
-                leader = max(cluster, key=lambda item:
-                             item[1].genome.aggression * (0.5 + 0.5 * item[1].genome.strength))
+                has_democracy = any("democracy" in ent.knowledge.known for _, ent in cluster)
+                if has_democracy:
+                    leader = max(cluster, key=lambda item: item[1].genome.sociability)
+                else:
+                    leader = max(cluster, key=lambda item:
+                                 item[1].genome.aggression * (0.5 + 0.5 * item[1].genome.strength))
                 leader_id, leader_ent = leader
 
                 # 파벌 이름 = 지도자 이름 기반
@@ -309,6 +312,10 @@ class Faction:
                         if eid == faction.leader_id and faction.members:
                             candidates = [entities.get(m) for m in faction.members if m in entities and entities.get(m)]
                             if candidates:
-                                new_leader = max(candidates, key=lambda e: e.genome.aggression)
+                                has_democracy = any("democracy" in c.knowledge.known for c in candidates if c)
+                                if has_democracy:
+                                    new_leader = max(candidates, key=lambda e: e.genome.sociability)
+                                else:
+                                    new_leader = max(candidates, key=lambda e: e.genome.aggression)
                                 faction.leader_id = new_leader.eid
         return disbanded

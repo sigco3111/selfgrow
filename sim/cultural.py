@@ -90,16 +90,21 @@ def cultural_transfer(
         if not hasattr(entity, "culture"):
             entity.culture = determine_culture(entity, rng)
         
-        for eid, other in world.entities_near(entity.x, entity.y, 1):
+        effects = entity.get_combined_effects()
+        base_range = 1
+        if "culture_range" in effects:
+            base_range += int(effects["culture_range"])
+        knowledge_mult = effects.get("knowledge_spread_mult", 1.0)
+        
+        for eid, other in world.entities_near(entity.x, entity.y, base_range):
             if other is entity or not other.alive:
                 continue
             
             if not hasattr(other, "culture"):
                 other.culture = determine_culture(other, rng)
             
-            # 지식 전수
             transferred = entity.knowledge.share(
-                other.knowledge, entity.genome.sociability,
+                other.knowledge, entity.genome.sociability * knowledge_mult,
                 rng=rng,
             )
             for tech in transferred:
