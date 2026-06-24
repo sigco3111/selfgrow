@@ -85,19 +85,18 @@ class Biome(str, Enum):
 class Tile:
     """월드의 한 칸. 지형 + 현재 자원량."""
 
-    def __init__(self, x: int, y: int, biome: Biome):
+    def __init__(self, x: int, y: int, biome: Biome,
+                 rng: random.Random):
         self.x = x
         self.y = y
         self.biome = biome
-        # config.MAX_TILE_RESOURCES에 정의된 최대량 기준으로 초기화
-        # 타일별 편차(VARIATION)를 적용해 부유한 타일과 빈약한 타일 차이 극대화
         self.resources: dict[str, float] = {}
         var = config.RESOURCE_TILE_VARIATION
-        tile_modifier = random.uniform(1.0 - var, 1.0 + var)
+        tile_modifier = rng.uniform(1.0 - var, 1.0 + var)
         max_res = config.MAX_TILE_RESOURCES.get(biome.value, {})
         for rtype, amount in max_res.items():
             base = amount * tile_modifier
-            self.resources[rtype] = max(0.0, base * random.uniform(0.5, 1.0))
+            self.resources[rtype] = max(0.0, base * rng.uniform(0.5, 1.0))
 
     def gather(self, resource_type: str, amount: float) -> float:
         """자원 채취. 실제 채취된 양 반환."""

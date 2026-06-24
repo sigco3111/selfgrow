@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -10,6 +11,7 @@ from rich.live import Live
 
 from . import config
 from .engine import SimulationEngine
+from .exporter import export_all
 from .visualizer import TerminalVisualizer, console
 
 
@@ -65,9 +67,27 @@ def main() -> None:
         "--interval", type=int, default=config.VISUALIZER_REFRESH_TICKS,
         help="화면 갱신 간격 (틱, 기본: 5)"
     )
+    parser.add_argument(
+        "--export", type=str, default=None,
+        help="결과 내보내기 경로 (지정 시 CSV/JSON 파일 생성)"
+    )
+    parser.add_argument(
+        "--export-format", type=str, default="csv", choices=["csv", "json"],
+        help="내보내기 포맷 (csv/json, 기본: csv)"
+    )
+    parser.add_argument(
+        "--experiment", type=str, default=None,
+        help="실험 설정 JSON 파일 경로 (지정 시 다중 실행 비교)"
+    )
 
     args = parser.parse_args()
     headless = args.no_visual
+
+    if args.experiment:
+        from .experiment import run_experiment_file
+        report = run_experiment_file(args.experiment)
+        print(report)
+        return
 
     console.print()
     console.rule("[cp.magenta]\u26a1 자가발전 문명 [cp.cyan]Phase 0[/][/]")
@@ -78,6 +98,7 @@ def main() -> None:
     console.print(f"  [cp.dim]시드:[/]     {args.seed or config.SEED}")
     console.print()
 
+    _start = time.time()
     engine = SimulationEngine(seed=args.seed)
 
     if headless:
@@ -121,6 +142,11 @@ def main() -> None:
         if extinction:
             console.print("\n[cp.red]\u2620 모든 개체가 멸종했습니다.[/]\n")
         visualizer.render_final_summary(engine.metrics)
+
+    _duration = time.time() - _start
+    if args.export:
+        export_all(engine, args.export, fmt=args.export_format)
+        print(f"\n결과 내보내기 완료: {os.path.abspath(args.export)}/")
 
 
 if __name__ == "__main__":

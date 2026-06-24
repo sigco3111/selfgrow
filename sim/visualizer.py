@@ -18,6 +18,7 @@ from rich.theme import Theme
 from . import config
 from . import season as sea
 from .metrics import MetricsCollector
+from .ideology import ideology_summary
 
 if TYPE_CHECKING:
     from .engine import SimulationEngine
@@ -360,6 +361,32 @@ class TerminalVisualizer:
                 title="[cp.red]\U0001f525 파벌[/]", box=ROUNDED, border_style="cp.dim"
             )
             groups.append(fac)
+
+        # -- Ideology --
+        ideo_counts = ideology_summary(world)
+        if ideo_counts:
+            ideo = Table.grid(padding=(0, 2))
+            ideo.add_column(style="cp.dim", width=14)
+            ideo.add_column(style="cp.text")
+            ideo.add_row("이데올로기", f"{sum(ideo_counts.values())}명")
+            ideo_names = {
+                "materialism": "[cp.amber]유물론[/]",
+                "militarism": "[cp.red]군국주의[/]",
+                "spiritualism": "[cp.purple]영성주의[/]",
+                "egalitarianism": "[cp.green]평등주의[/]",
+            }
+            for ideo_name, count in sorted(ideo_counts.items(), key=lambda x: -x[1]):
+                display = ideo_names.get(ideo_name, ideo_name)
+                ideo.add_row(f"  {display}", f"{count}")
+            groups.append(
+                Panel(ideo, title="[cp.cyan]\U0001f9e0 이데올로기[/]", box=ROUNDED, border_style="cp.dim")
+            )
+        else:
+            ideo = Panel(
+                Text("(아직 형성 안 됨)", style="cp.dim"),
+                title="[cp.cyan]\U0001f9e0 이데올로기[/]", box=ROUNDED, border_style="cp.dim"
+            )
+            groups.append(ideo)
 
         # -- Brain Comparison --
         brain_panel = self._render_brain_panel(snap)

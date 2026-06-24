@@ -59,9 +59,8 @@ class Genome:
         "loyalty",
     ]
 
-    def mutate(self, rng: random.Random | None = None) -> Genome:
+    def mutate(self, rng: random.Random) -> Genome:
         """돌연변이: 설정된 확률/크기로 유전자 무작위 변경."""
-        rng = rng or random
         child = copy.deepcopy(self)
         child.generation = self.generation + 1
 
@@ -78,17 +77,18 @@ class Genome:
         return child
 
     @classmethod
-    def crossover(cls, parent1: Genome, parent2: Genome) -> Genome:
+    def crossover(cls, parent1: Genome, parent2: Genome,
+                  rng: random.Random) -> Genome:
         """두 부모 유전자의 균일 교차 (uniform crossover)."""
         child = copy.deepcopy(parent1)
         child.generation = max(parent1.generation, parent2.generation) + 1
 
         for trait in cls._trait_names:
-            if random.random() < 0.5:
+            if rng.random() < 0.5:
                 setattr(child, trait, getattr(parent2, trait))
 
         # 직업: 50% 확률로 한쪽 부모를 따름
-        if random.random() < 0.5:
+        if rng.random() < 0.5:
             child.specialization = parent2.specialization
 
         return child
@@ -104,13 +104,13 @@ class Genome:
                 f"{traits}")
 
     @classmethod
-    def random_initial(cls) -> Genome:
+    def random_initial(cls, rng: random.Random) -> Genome:
         """초기 개체용 무작위 유전자 생성."""
         g = cls()
         for trait in cls._trait_names:
-            setattr(g, trait, random.random())
-        g.specialization = random.choice(SPECIALIZATIONS)
+            setattr(g, trait, rng.random())
+        g.specialization = rng.choice(SPECIALIZATIONS)
         g.generation = 0
         # 초기 aggression은 약간 낮게
-        g.aggression = random.random() * 0.5
+        g.aggression = rng.random() * 0.5
         return g

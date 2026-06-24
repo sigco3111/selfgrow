@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -60,7 +60,7 @@ class MetricsCollector:
     """전체 지표 수집기 — 주기적 스냅샷 저장."""
 
     def __init__(self):
-        self.snapshots: list[Snapshot] = []
+        self.snapshots: deque[Snapshot] = deque(maxlen=config.METRICS_SNAPSHOT_MAXLEN)
         self._running_births = 0
         self._running_deaths = 0
         self._running_kills = 0

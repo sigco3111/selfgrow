@@ -45,14 +45,14 @@ class WorldEvent:
         return EVENT_NAMES_KR.get(self.event_type, self.event_type.value)
 
 
-def generate_event(world: World) -> WorldEvent | None:
+def generate_event(world: World, rng: random.Random) -> WorldEvent | None:
     events = list(EventType)
-    chosen = random.choice(events)
-    cx = random.randint(0, world.width - 1)
-    cy = random.randint(0, world.height - 1)
-    radius = random.randint(3, 8)
-    duration = random.randint(10, 25)
-    severity = random.uniform(0.3, 1.0)
+    chosen = rng.choice(events)
+    cx = rng.randint(0, world.width - 1)
+    cy = rng.randint(0, world.height - 1)
+    radius = rng.randint(config.EVENT_RADIUS_MIN, config.EVENT_RADIUS_MAX)
+    duration = rng.randint(config.EVENT_DURATION_MIN, config.EVENT_DURATION_MAX)
+    severity = rng.uniform(config.EVENT_SEVERITY_MIN, config.EVENT_SEVERITY_MAX)
     return WorldEvent(
         event_type=chosen,
         remaining=duration,
@@ -135,7 +135,8 @@ def apply_event_tick(world: World, ev: WorldEvent) -> list[dict]:
     return logs
 
 
-def process_events(world: World) -> list[dict]:
+def process_events(world: World, rng: random.Random | None = None) -> list[dict]:
+    rng = rng or random
     logs: list[dict] = []
     active = getattr(world, "event_registry", [])
     remaining: list[WorldEvent] = []
@@ -154,11 +155,11 @@ def process_events(world: World) -> list[dict]:
     world.event_registry = remaining
 
     if len(remaining) < config.EVENT_MAX_ACTIVE:
-        if random.random() < config.EVENT_BASE_PROBABILITY:
+        if rng.random() < config.EVENT_BASE_PROBABILITY:
             world_tick = getattr(world, "tick", 0)
             last_tick = getattr(world, "_last_event_tick", 0)
             if world_tick - last_tick >= config.EVENT_MIN_INTERVAL:
-                ev = generate_event(world)
+                ev = generate_event(world, rng)
                 if ev:
                     remaining.append(ev)
                     world.event_registry = remaining

@@ -41,11 +41,12 @@ class TradeRecord:
 class Market:
     """중앙 시장 — 주문장 + 가격 발견."""
 
-    def __init__(self):
+    def __init__(self, rng: random.Random | None = None):
+        self._rng = rng
         self._next_order_id = 0
         self.buy_orders: list[Order] = []   # 매수 주문 (가격 내림차순)
         self.sell_orders: list[Order] = []  # 매도 주문 (가격 오름차순)
-        self.trade_history: list[TradeRecord] = []
+        self.trade_history: deque[TradeRecord] = deque(maxlen=config.TRADE_HISTORY_MAXLEN)
         self.price_history: dict[str, deque[float]] = {
             r: deque(maxlen=config.PRICE_HISTORY_LENGTH)
             for r in ["food", "wood", "stone", "iron", "gold"]
@@ -53,9 +54,7 @@ class Market:
         self.tick = 0
 
         # 초기 가격 시드
-        base_prices = {"food": 2.0, "wood": 3.0, "stone": 4.0,
-                       "iron": 8.0, "gold": 15.0}
-        for rtype, price in base_prices.items():
+        for rtype, price in config.BASE_PRICES.items():
             self.price_history[rtype].append(price)
 
     def place_order(self, seller_id: int, resource_type: str,
@@ -145,19 +144,13 @@ class Market:
         self.buy_orders = [o for o in self.buy_orders if o.age < config.ORDER_EXPIRY]
         self.sell_orders = [o for o in self.sell_orders if o.age < config.ORDER_EXPIRY]
 
-    PRICE_FLOOR: dict[str, float] = {
-        "food": 0.5, "wood": 0.5, "stone": 0.5,
-        "iron": 2.0, "gold": 5.0,
-    }
-
     def get_average_price(self, resource_type: str) -> float:
         """최근 가격 평균. 데이터가 없으면 기본값."""
         history = self.price_history.get(resource_type, deque())
         if not history:
-            return {"food": 2.0, "wood": 3.0, "stone": 4.0,
-                    "iron": 8.0, "gold": 15.0}.get(resource_type, 5.0)
+            return config.BASE_PRICES.get(resource_type, 5.0)
         avg = sum(history) / len(history)
-        floor = self.PRICE_FLOOR.get(resource_type, 0.5)
+        floor = config.PRICE_FLOOR.get(resource_type, 0.5)
         return max(floor, avg)
 
     def get_last_price(self, resource_type: str) -> float:

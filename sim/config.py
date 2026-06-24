@@ -4,13 +4,39 @@ import random
 from dataclasses import dataclass
 from typing import ClassVar
 
+# 설정 오버라이드 (실험 프레임워크 Phase 2.2)
+_OVERRIDABLE_NAMES: set[str] = set()
+
+def _overridable(name: str, default: object) -> object:
+    _OVERRIDABLE_NAMES.add(name)
+    return default
+
+def apply_overrides(overrides: dict[str, object]) -> None:
+    for key, value in overrides.items():
+        if key in _OVERRIDABLE_NAMES:
+            globals()[key] = value
+        else:
+            raise KeyError(f"Unknown or non-overridable config key: {key}")
+
+
+def create_rng(seed: int, subsystem: str) -> random.Random:
+    """서브시스템별 독립된 RNG 인스턴스 생성.
+    
+    각 서브시스템(engine, world, entity, brain, market, faction, events 등)은
+    고유한 시드 공간을 가지도록 subsystem 문자열을 해시하여 결합.
+    """
+    import hashlib
+    combined = f"{seed}:{subsystem}"
+    derived_seed = int(hashlib.sha256(combined.encode()).hexdigest()[:8], 16)
+    return random.Random(derived_seed)
+
 
 # ──────────────────────────────────────────────
 # 월드
 # ──────────────────────────────────────────────
-WORLD_WIDTH = 40
-WORLD_HEIGHT = 30
-SEED = 42                  # 난수 시드 (재현성)
+WORLD_WIDTH = _overridable("WORLD_WIDTH", 40)
+WORLD_HEIGHT = _overridable("WORLD_HEIGHT", 30)
+SEED = _overridable("SEED", 42)                  # 난수 시드 (재현성)
 
 # 지형 비율 (합 1.0)
 BIOME_WEIGHTS: dict[str, float] = {
@@ -44,7 +70,17 @@ MAX_TILE_RESOURCES: dict[str, dict[str, float]] = {
 # ──────────────────────────────────────────────
 # 개체 (Entity)
 # ──────────────────────────────────────────────
-INITIAL_ENTITY_COUNT = 40
+INITIAL_ENTITY_COUNT = _overridable("INITIAL_ENTITY_COUNT", 40)
+
+RESOURCE_MAX_STACK = 8               # 인벤토리 슬롯당 최대 적재량
+BASE_GATHER_RATE = 2.0               # 기본 채집량
+CONSUME_FOOD_AMOUNT = 2.0            # 한 번에 소비하는 식량량
+TRADE_SURPLUS_THRESHOLD: dict[str, int] = {"food": 4, "default": 3}
+TRADE_SELL_RATIO = 0.5               # 잉여 자원 중 판매 비율
+KNOWLEDGE_INHERIT_RATIO = 0.3        # 번식 시 부모 지식 상속 비율
+RESOURCE_BEQUEST_RATIO = 0.2         # 번식 시 부모 자원 상속 비율
+MAX_EQUIPPED_SLOTS = 3               # 최대 장비 슬롯 수
+AGING_ENERGY_COST = 5.0              # 노화 시 매 틱 에너지 감소량
 
 BASE_MAX_ENERGY = 100.0
 BASE_ENERGY = 80.0
@@ -91,6 +127,16 @@ LIFESPAN_VARIANCE = 200    # 개체별 편차
 MARKET_TAX_RATE = 0.02   # 거래 수수료 2%
 ORDER_EXPIRY = 20          # 주문이 자동 만료되는 틱 수
 PRICE_HISTORY_LENGTH = 100  # 가격 지수 저장 길이
+TRADE_HISTORY_MAXLEN = 5000  # 거래 내역 최대 보관 수 (메모리 보호)
+
+PRICE_FLOOR: dict[str, float] = {
+    "food": 0.5, "wood": 0.5, "stone": 0.5,
+    "iron": 2.0, "gold": 5.0,
+}
+BASE_PRICES: dict[str, float] = {
+    "food": 2.0, "wood": 3.0, "stone": 4.0,
+    "iron": 8.0, "gold": 15.0,
+}
 
 
 # ──────────────────────────────────────────────
@@ -180,19 +226,23 @@ TECH_TREE: list[TechDef] = [
             ["metallurgy", "currency"], 140, {"gold_value_mult": 3.0, "trade_gold_bonus": 0.3, "gold_ornament_boost": True}),
 ]
 
+# 기술 효과 Lookup 캐시 (O(1) 조회 — get_combined_effects() 최적화)
+TECH_EFFECTS_MAP: dict[str, dict] = {t.name: t.effect for t in TECH_TREE}
+
 
 # ──────────────────────────────────────────────
 # 지니계수 / 통계
 # ──────────────────────────────────────────────
 METRICS_SNAPSHOT_INTERVAL = 10   # n틱마다 스냅샷 저장
+METRICS_SNAPSHOT_MAXLEN = 2000   # 스냅샷 최대 보관 개수 (메모리 보호)
 WORLD_LOG_INTERVAL = 50          # n틱마다 월드 상태 로그
 
 
 # ──────────────────────────────────────────────
 # 파벌 (Faction)
 # ──────────────────────────────────────────────
-FACTION_ENABLED = True
-FACTION_FORMATION_SOCIABILITY = 0.55  # 파벌 결성에 필요한 최소 사회성
+FACTION_ENABLED = _overridable("FACTION_ENABLED", True)
+FACTION_FORMATION_SOCIABILITY = 0.1  # 파벌 결성에 필요한 최소 사회성
 FACTION_FORMATION_RADIUS = 5          # 같은 파벌로 결성될 최대 거리 (맨해튼)
 FACTION_FORMATION_MIN_MEMBERS = 3     # 파벌 결성에 필요한 최소 인원
 FACTION_FORMATION_TICKS = 20          # 이 틱 이상 함께 있어야 결성
@@ -202,6 +252,34 @@ FACTION_ALLY_COMBAT_BONUS = 0.15      # 동맹 지원 시 공/방 15% 보정
 FACTION_TERRITORY_RADIUS = 5          # 파벌 영토 반경 (지도자 기준)
 FACTION_COHESION_BREAKUP = 0.3        # 결속력이 이 아래면 파벌 해체 위험
 FACTION_WAR_DURATION = 50             # 선언 후 자동 종료까지 틱
+
+
+# ──────────────────────────────────────────────
+# 이데올로기 시스템 (Phase 3.1)
+# ──────────────────────────────────────────────
+IDEOLOGIES: dict[str, dict] = {
+    "materialism": {
+        "traits": {"industry": 0.15, "sociability": 0.1},
+        "action_bias": {"trade": 1.3, "gather": 1.2, "craft": 1.2},
+    },
+    "militarism": {
+        "traits": {"aggression": 0.2, "loyalty": 0.15},
+        "action_bias": {"combat": 1.5, "explore": 1.1},
+    },
+    "spiritualism": {
+        "traits": {"curiosity": 0.1, "sociability": 0.15},
+        "action_bias": {"explore": 1.2, "reproduce": 1.2},
+    },
+    "egalitarianism": {
+        "traits": {"sociability": 0.2, "loyalty": 0.1},
+        "action_bias": {"trade": 1.4},
+    },
+}
+IDEOLOGY_FORMATION_TICKS = 30
+IDEOLOGY_TRANSFER_RADIUS = 2
+IDEOLOGY_CONVERSION_CHANCE = 0.05
+IDEOLOGY_SAME_BONUS = 0.15
+IDEOLOGY_DIFFERENT_PENALTY = 0.1
 
 
 # ──────────────────────────────────────────────
@@ -218,12 +296,14 @@ COMBAT_RETREAT_THRESHOLD = 0.25       # 에너지 비율 이하면 후퇴
 # ──────────────────────────────────────────────
 # SmartBrain — 듀얼 브레인 시스템
 # ──────────────────────────────────────────────
-SMART_BRAIN_RATIO = 0.25          # 전체 개체 중 SmartBrain 비율 (0.25 = 25%)
+SMART_BRAIN_RATIO = _overridable("SMART_BRAIN_RATIO", 0.25)          # 전체 개체 중 SmartBrain 비율 (0.25 = 25%)
 SMART_MEMORY_SIZE = 50            # 각 SmartBrain이 기억하는 최근 경험 수
 SMART_SIMILARITY_THRESHOLD = 0.7  # 경험 참조를 위한 상태 유사도 임계값
 SMART_PLANNING_RATE = 0.3         # 멀티스텝 계획 시도 확률 (매 결정마다)
 SMART_PLANNING_DISCOUNT = 0.6     # 미래 액션 점수 할인율 (0~1, 높을수록 미래 중시)
 SMART_LEARNING_RATE = 0.1         # 경험 보정의 학습률 (너무 높으면 불안정)
+SMART_TRADE_THRESHOLD = 3          # SmartBrain 거래 제안 수락 임계값
+SMART_SURPLUS_THRESHOLDS: dict[str, int] = {"food": 5, "default": 3}
 
 
 # ──────────────────────────────────────────────
@@ -240,11 +320,30 @@ SEASON_SPEED_MOD = [1.0, 1.0, 1.0, 0.8]            # 이동 속도
 
 
 # ──────────────────────────────────────────────
+# 연구/기술
+# ──────────────────────────────────────────────
+RESEARCH_BASIC_BIAS = 0.4          # 기초 기술 선택 편향 확률
+TECH_PIONEER_CHANCE = 0.1          # 기술 발견 시 선구자 즉시 학습 확률
+
+
+# ──────────────────────────────────────────────
+# 파벌
+# ──────────────────────────────────────────────
+FACTION_FORM_CHANCE = 0.3          # 매 틱 파벌 결성 시도 확률
+
+
+# ──────────────────────────────────────────────
 # 랜덤 이벤트 시스템
 # ──────────────────────────────────────────────
 EVENT_BASE_PROBABILITY = 0.02        # 매 틱 이벤트 발생 확률 (2%)
 EVENT_MAX_ACTIVE = 3                  # 동시에 활성화될 수 있는 최대 이벤트 수
 EVENT_MIN_INTERVAL = 10              # 이벤트 간 최소 틱 간격
+EVENT_RADIUS_MIN = 3                  # 이벤트 최소 반경
+EVENT_RADIUS_MAX = 8                  # 이벤트 최대 반경
+EVENT_DURATION_MIN = 10              # 이벤트 최소 지속 틱
+EVENT_DURATION_MAX = 25              # 이벤트 최대 지속 틱
+EVENT_SEVERITY_MIN = 0.3             # 이벤트 최소 심각도
+EVENT_SEVERITY_MAX = 1.0             # 이벤트 최대 심각도
 
 
 # ──────────────────────────────────────────────
@@ -282,6 +381,18 @@ BUILDING_DEFS: list[BuildingDef] = [
 ]
 
 BUILDING_DESTROY_CHANCE = 0.05  # 전투/재해 시 건물 파괴 확률
+
+
+# ──────────────────────────────────────────────
+# 외교 시스템 (Phase 2.1)
+# ──────────────────────────────────────────────
+DIPLOMACY_ENABLED = True
+ALLIANCE_BREAK_COHESION = 0.2        # 동맹 파기 시 결속력 감소량
+TRADE_PACT_TAX_DISCOUNT = 0.5        # 무역 협정 시 거래 수수료 할인율
+VASSAL_TRIBUTE_RATIO = 0.1           # 종속 파벌의 자원 상납 비율
+ALLIANCE_COMBAT_BONUS = 0.05         # 동맹 전투 보너스 추가
+DIPLOMACY_RELATION_DECAY = 100       # 우호 관계 자동 악화 틱 간격
+NON_AGGRESSION_COMBAT_SCORE = 0.0    # 불가침 조약 시 전투 점수 강제
 
 
 # ──────────────────────────────────────────────

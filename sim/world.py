@@ -18,10 +18,13 @@ if TYPE_CHECKING:
 class World:
     """시뮬레이션이 펼쳐지는 2D 격자 공간."""
 
-    def __init__(self, seed: int | None = None):
+    def __init__(self, seed: int | None = None, rng: random.Random | None = None):
         self.width = config.WORLD_WIDTH
         self.height = config.WORLD_HEIGHT
-        self.rng = random.Random(seed if seed is not None else config.SEED)
+        if rng:
+            self.rng = rng
+        else:
+            self.rng = config.create_rng(seed if seed is not None else config.SEED, "world")
         self.tick = 0
 
         # 타일 그리드
@@ -37,6 +40,9 @@ class World:
 
         # 파벌 레지스트리: faction_id -> Faction
         self.faction_registry: dict[int, Faction] = {}
+
+        # 공간 인덱스: (x,y) → [entity_id, ...]
+        self._spatial_index: dict[tuple[int, int], list[int]] = {}
 
         # 이벤트 레지스트리: 활성화된 WorldEvent 목록
         self.event_registry: list = []
@@ -64,7 +70,7 @@ class World:
                         y == 0 or y == self.height - 1):
                         biome = Biome.PLAIN
 
-                row.append(Tile(x, y, biome))
+                row.append(Tile(x, y, biome, rng=self.rng))
             self.tiles.append(row)
 
     # ── 타일 접근 ──
@@ -97,24 +103,76 @@ class World:
                             neighbors.append((nx, ny))
         return neighbors
 
+    # ── 공간 인덱스 ──
+    def _index_position(self, entity_id: int, x: int, y: int) -> None:
+        """공간 인덱스에 개체 위치 등록."""
+        key = (x, y)
+        if key not in self._spatial_index:
+            self._spatial_index[key] = []
+        if entity_id not in self._spatial_index[key]:
+            self._spatial_index[key].append(entity_id)
+
+    def _unindex_position(self, entity_id: int, x: int, y: int) -> None:
+        """공간 인덱스에서 개체 위치 제거."""
+        key = (x, y)
+        bucket = self._spatial_index.get(key)
+        if bucket and entity_id in bucket:
+            bucket.remove(entity_id)
+            if not bucket:
+                del self._spatial_index[key]
+
+    def entities_near(self, x: int, y: int, radius: int) -> list[tuple[int, Entity]]:
+        """(O(πr²)) 반경 내 모든 개체를 공간 인덱스로 조회."""
+        result: list[tuple[int, Entity]] = []
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                nx, ny = x + dx, y + dy
+                key = (nx, ny)
+                bucket = self._spatial_index.get(key)
+                if bucket:
+                    for eid in bucket:
+                        entity = self.entities.get(eid)
+                        if entity:
+                            dist = abs(entity.x - x) + abs(entity.y - y)
+                            if dist <= radius:
+                                result.append((eid, entity))
+        return result
+
     # ── 개체 관리 ──
     def spawn_entity(self, entity: Entity) -> int:
         entity_id = self._next_entity_id
         self._next_entity_id += 1
         self.entities[entity_id] = entity
+        self._index_position(entity_id, entity.x, entity.y)
         return entity_id
 
     def remove_entity(self, entity_id: int) -> None:
+        entity = self.entities.get(entity_id)
+        if entity:
+            self._unindex_position(entity_id, entity.x, entity.y)
         self.entities.pop(entity_id, None)
-        # 클레임 정리
         expired = [pos for pos, (eid, _) in self.tile_claims.items() if eid == entity_id]
         for pos in expired:
             del self.tile_claims[pos]
 
+    def move_entity(self, entity_id: int, new_x: int, new_y: int) -> None:
+        """개체 이동 시 공간 인덱스 갱신."""
+        entity = self.entities.get(entity_id)
+        if entity and (entity.x != new_x or entity.y != new_y):
+            self._unindex_position(entity_id, entity.x, entity.y)
+            entity.x, entity.y = new_x, new_y
+            self._index_position(entity_id, new_x, new_y)
+
     def entity_at(self, x: int, y: int) -> list[tuple[int, Entity]]:
-        """특정 위치의 모든 개체."""
-        return [(eid, e) for eid, e in self.entities.items()
-                if (e.x, e.y) == (x, y)]
+        """특정 위치의 모든 개체 (공간 인덱스 활용)."""
+        result: list[tuple[int, Entity]] = []
+        bucket = self._spatial_index.get((x, y))
+        if bucket:
+            for eid in bucket:
+                entity = self.entities.get(eid)
+                if entity:
+                    result.append((eid, entity))
+        return result
 
     def find_nearest_tile_with(self, x: int, y: int,
                                  resource_type: str | None = None,
@@ -145,13 +203,8 @@ class World:
         return None
 
     def find_entities_in_range(self, x: int, y: int, radius: int) -> list[tuple[int, Entity]]:
-        """반경 내 모든 개체."""
-        result = []
-        for eid, entity in self.entities.items():
-            dist = math.sqrt((entity.x - x) ** 2 + (entity.y - y) ** 2)
-            if dist <= radius:
-                result.append((eid, entity))
-        return result
+        """반경 내 모든 개체 (entities_near()로 대체 예정, 호환성 유지)."""
+        return self.entities_near(x, y, radius)
 
     # ── 영토/클레임 ──
     def claim_tile(self, x: int, y: int, entity_id: int) -> None:
