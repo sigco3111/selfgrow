@@ -1,0 +1,12 @@
+{
+  "seed": 42,
+  "tick_count": 0,
+  "config": {
+    "WORLD_WIDTH": 40,
+    "WORLD_HEIGHT": 30,
+    "INITIAL_ENTITY_COUNT": 40,
+    "SMART_BRAIN_RATIO": 0.25,
+    "FACTION_ENABLED": true,
+    "DIPLOMACY_ENABLED": true
+  }
+}

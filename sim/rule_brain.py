@@ -136,10 +136,8 @@ class RuleBasedBrain(Brain):
         food_stored = entity.inventory.get("food", 0)
         energy_ratio = entity.energy / entity.max_energy
 
-        nearby_entities = [(eid, e) for eid, e in world.entities.items()
-                           if e.alive and e != entity
-                           and abs(e.x - entity.x) <= 1
-                           and abs(e.y - entity.y) <= 1]
+        nearby_entities = [(eid, e) for eid, e in world.entities_near(entity.x, entity.y, 1)
+                           if e.alive and e != entity]
         same_tile = [(eid, e) for (eid, e) in nearby_entities
                      if (e.x, e.y) == (entity.x, entity.y)]
 

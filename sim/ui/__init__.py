@@ -9,6 +9,7 @@ from .tech_tree import render_tech_tree_panel
 from .resource_heatmap import render_resource_heatmap
 from .entity_trail import render_map_with_trail
 from .faction_graph import render_faction_graph
+from .interactive_map import render_interactive_map, render_entity_info_panel, render_season_indicator
 
 __all__ = [
     "render_timeseries_panel",
@@ -19,6 +20,9 @@ __all__ = [
     "render_resource_heatmap",
     "render_map_with_trail",
     "render_faction_graph",
+    "render_interactive_map",
+    "render_entity_info_panel",
+    "render_season_indicator",
     "LayoutManager",
     "LayoutMode",
 ]
