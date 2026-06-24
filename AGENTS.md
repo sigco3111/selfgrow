@@ -71,8 +71,9 @@ selfgrow/
     ├── ideology.py       # 이데올로기 — 4종 행동 바이어스 — 76줄
     ├── cultural.py       # 문화 — 언어/관습/지식 전수 — 131줄
     ├── season.py         # 계절 — 4계절 25틱 순환 — 39줄
-    ├── events.py         # 랜덤 이벤트 — 6종 이벤트 — 142줄
+    ├── events.py         # 랜덤 이벤트 — 8종 이벤트 — 142줄
     ├── buildings.py      # 건물 — 5종 (저장고/감시탑/벽/대장간/제단)
+    ├── savefile.py       # 저장/로드 — JSON 기반 직렬화 — 332줄
     ├── spatial.py        # 공간 인덱싱 — QuadTree — 157줄
     ├── research.py       # 글로벌 연구 — 기술 포인트 축적 — 61줄
     ├── experiment.py     # 실험 프레임워크 — 다중 실행 비교 — 162줄
@@ -197,6 +198,7 @@ config.py ── 모든 모듈이 참조 ──┐
 - **Phase 3.1** ✅ 완료: 이데올로기, 계절, 건물, 랜덤 이벤트 시스템
 - **Phase 4** ✅ 완료: Rich 기반 사이버펑크 TUI 시각화
 - **Phase 4.5** ✅ 완료: 데이터 내보내기(CSV/JSON), 외부 분석 도구 연동
+- **Phase 5** ✅ 완료: 기술부채 해소 + CI, 화폐 시스템, Tier 5 기술, 저장/로드
 
 > **⚠️ LLM 사용 금지**: 이 프로젝트는 앞으로도 **영원히 LLM/외부 AI를 연결하지 않습니다**.
 > 모든 의사결정은 순수 로컬 알고리즘(RuleBasedBrain / SmartBrain)으로 처리합니다.
@@ -238,9 +240,8 @@ python -m sim.main --no-visual --ticks 200 --seed 42
 
 ## 9. 테스트 현황
 
-- **총 테스트 수**: 292개 (전체 통과)
-- **테스트 파일**: 34개 (`tests/test_*.py`)
+- **총 테스트 수**: 350+개 (전체 통과)
+- **테스트 파일**: 41개 (`tests/test_*.py`)
 - **커버리지**: 미측정 (pytest-cov 설정 완료, 미실행)
 - **기존 커버**: entity, genome, market, world, knowledge, season, events, buildings, ideology, faction, diplomacy, brain, performance, interactive_map
-- **신규 커버 (Phase 5)**: config, resource, metrics, research, faction_system, diplomacy, entity_action, entity_combat, entity_craft, entity_reproduce, messaging, exporter, experiment
-- **미커버 모듈**: brain_base, brain_goals, brain_planning, brain_messaging, smart_brain, rule_brain
+- **신규 커버 (Phase 5)**: config, resource, metrics, research, faction_system, diplomacy, entity_action, entity_combat, entity_craft, entity_reproduce, messaging, exporter, experiment, savefile, brain_base, brain_goals, brain_planning, brain_messaging, smart_brain, rule_brain
