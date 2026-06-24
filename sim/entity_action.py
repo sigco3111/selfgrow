@@ -81,6 +81,19 @@ def do_gather(entity: Entity, world: World) -> tuple[list[dict], float]:
         if entity.inventory_is_full:
             break
 
+    # ── 화폐 시스템 활성화 (currency 기술 필요) ──
+    if total_gathered > 0 and entity.knowledge.know(config.CURRENCY_ACTIVATION_TECH):
+        from .entity import CurrencyType
+        if entity.currency == CurrencyType.NONE:
+            entity.currency = CurrencyType.SHELL
+            events.append(entity._event("currency_activate", {"type": "shell"}))
+        if entity.currency == CurrencyType.SHELL:
+            shell_income = total_gathered * config.CURRENCY_SHELL_GATHER_RATE
+            entity.money += shell_income
+            if entity.money >= config.CURRENCY_SHELL_TO_COIN_THRESHOLD:
+                entity.currency = CurrencyType.COIN
+                events.append(entity._event("currency_upgrade", {"type": "coin"}))
+
     return events, total_gathered
 
 
@@ -108,16 +121,15 @@ def do_trade(entity: Entity, world: World, market: Market) -> list[dict]:
     trade_efficiency = effects.get("trade_efficiency", 0.0)
     trade_gold_bonus = effects.get("trade_gold_bonus", 0.0)
     market_tax_discount = effects.get("market_tax_discount", 0.0)
+    coin_bonus = config.CURRENCY_COIN_TRADE_BONUS if entity.currency.value == "coin" else 0.0
 
     # 1. 팔 surplus 자원: 매도 주문 등록
     for rtype, amount in list(entity.inventory.items()):
         surplus_threshold = config.TRADE_SURPLUS_THRESHOLD.get(rtype, config.TRADE_SURPLUS_THRESHOLD["default"])
         if amount > surplus_threshold:
             sell_qty = amount * config.TRADE_SELL_RATIO
-            price_mult = 0.85 + 0.3 * entity.genome.sociability + trade_efficiency * 0.3
+            price_mult = 0.85 + 0.3 * entity.genome.sociability + trade_efficiency * 0.3 + coin_bonus
             unit_price = market.get_average_price(rtype) * price_mult
-
-            # 금 거래 보너스 (alchemy)
             if rtype == "gold" and trade_gold_bonus > 0:
                 unit_price *= 1.0 + trade_gold_bonus
 
@@ -137,7 +149,7 @@ def do_trade(entity: Entity, world: World, market: Market) -> list[dict]:
         deficit_threshold = config.TRADE_SURPLUS_THRESHOLD.get(rtype, config.TRADE_SURPLUS_THRESHOLD["default"]) - 2
         if entity.inventory.get(rtype, 0) < deficit_threshold:
             buy_qty = 3 - entity.inventory.get(rtype, 0)
-            price_mult = 0.85 + 0.3 * entity.genome.sociability + trade_efficiency * 0.3
+            price_mult = 0.85 + 0.3 * entity.genome.sociability + trade_efficiency * 0.3 - coin_bonus * 0.5
             unit_price = market.get_average_price(rtype) * price_mult
             market.place_order(
                 seller_id=entity.eid,
