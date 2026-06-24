@@ -133,131 +133,40 @@ class Faction:
         for eid in expired:
             del self.wars[eid]
 
-    # ──────────────────────────────────────────
-    # 외교 관계 (Phase 2.1)
-    # ──────────────────────────────────────────
-
     DIPLOMACY_TYPES = ("ALLIANCE", "TRADE_PACT", "NON_AGGRESSION", "VASSAL")
 
     def set_relation(self, target_id: int, treaty: str) -> None:
-        if treaty in self.DIPLOMACY_TYPES:
-            self.diplomacy[target_id] = treaty
+        from .diplomacy import diplomacy_manager
+        diplomacy_manager.set_relation(self, target_id, treaty)
 
     def get_relation(self, target_id: int) -> str | None:
-        return self.diplomacy.get(target_id)
+        from .diplomacy import diplomacy_manager
+        return diplomacy_manager.get_relation(self, target_id)
 
     def remove_relation(self, target_id: int) -> None:
-        self.diplomacy.pop(target_id, None)
+        from .diplomacy import diplomacy_manager
+        diplomacy_manager.remove_relation(self, target_id)
 
     def has_treaty_with(self, target_id: int, treaty: str) -> bool:
-        return self.diplomacy.get(target_id) == treaty
+        from .diplomacy import diplomacy_manager
+        return diplomacy_manager.has_treaty_with(self, target_id, treaty)
 
     def is_neutral(self, target_id: int) -> bool:
-        return (not self.is_at_war_with(target_id)
-                and not self.has_treaty_with(target_id, "ALLIANCE")
-                and not self.has_treaty_with(target_id, "VASSAL")
-                and not self.has_treaty_with(target_id, "NON_AGGRESSION"))
+        from .diplomacy import diplomacy_manager
+        return diplomacy_manager.is_neutral(self, target_id)
 
     def propose_treaty(self, target_faction: Faction, treaty: str) -> bool:
-        if not config.DIPLOMACY_ENABLED:
-            return False
-        if treaty not in self.DIPLOMACY_TYPES:
-            return False
-        if self.is_at_war_with(target_faction.faction_id):
-            return False
-
-        if treaty == "ALLIANCE":
-            self.set_relation(target_faction.faction_id, "ALLIANCE")
-            target_faction.set_relation(self.faction_id, "ALLIANCE")
-        elif treaty == "TRADE_PACT":
-            self.set_relation(target_faction.faction_id, "TRADE_PACT")
-            target_faction.set_relation(self.faction_id, "TRADE_PACT")
-        elif treaty == "NON_AGGRESSION":
-            self.set_relation(target_faction.faction_id, "NON_AGGRESSION")
-            target_faction.set_relation(self.faction_id, "NON_AGGRESSION")
-        elif treaty == "VASSAL":
-            self.set_relation(target_faction.faction_id, "VASSAL")
-            target_faction.set_relation(self.faction_id, "ALLIANCE")
-        return True
+        from .diplomacy import diplomacy_manager
+        return diplomacy_manager.propose_treaty(self, target_faction, treaty)
 
     def break_treaty(self, target_faction: Faction) -> None:
-        treaty = self.get_relation(target_faction.faction_id)
-        if treaty is None:
-            return
-        if treaty == "VASSAL":
-            self.set_relation(target_faction.faction_id, "WAR")
-            target_faction.set_relation(self.faction_id, "WAR")
-        else:
-            self.remove_relation(target_faction.faction_id)
-            target_faction.remove_relation(self.faction_id)
-        self._cohesion = max(0.0, self.cohesion - config.ALLIANCE_BREAK_COHESION)
+        from .diplomacy import diplomacy_manager
+        diplomacy_manager.break_treaty(self, target_faction)
 
     def tick_diplomacy(self, faction_registry: dict[int, Faction],
                        entities: dict[int, Entity]) -> list[str]:
-        events: list[str] = []
-        if not config.DIPLOMACY_ENABLED:
-            return events
-        for target_id, treaty in list(self.diplomacy.items()):
-            target_faction = faction_registry.get(target_id)
-            if target_faction is None:
-                self.remove_relation(target_id)
-                continue
-            if treaty == "ALLIANCE":
-                self._process_alliance_tick(target_faction, entities, events)
-            elif treaty == "TRADE_PACT":
-                self._process_trade_pact_tick(target_faction, entities, events)
-            elif treaty == "NON_AGGRESSION":
-                self._process_non_aggression_tick(target_faction, entities, events)
-            elif treaty == "VASSAL":
-                self._process_vassal_tick(target_faction, entities, events)
-        return events
-
-    def _process_alliance_tick(self, target: Faction, entities: dict[int, Entity],
-                               events: list[str]) -> None:
-        if self.is_at_war_with(target.faction_id) or target.is_at_war_with(self.faction_id):
-            self.break_treaty(target)
-            events.append(f"Alliance broken between {self.name} and {target.name}")
-
-    def _process_trade_pact_tick(self, target: Faction, entities: dict[int, Entity],
-                                 events: list[str]) -> None:
-        pass
-
-    def _process_non_aggression_tick(self, target: Faction, entities: dict[int, Entity],
-                                     events: list[str]) -> None:
-        if self.is_at_war_with(target.faction_id):
-            self.remove_relation(target.faction_id)
-            target.remove_relation(self.faction_id)
-            events.append(f"Non-aggression pact broken between {self.name} and {target.name}")
-
-    def _process_vassal_tick(self, target: Faction, entities: dict[int, Entity],
-                             events: list[str]) -> None:
-        tribute_events = self._collect_vassal_tribute(target, entities)
-        events.extend(tribute_events)
-
-    def _collect_vassal_tribute(self, overlord: Faction,
-                                entities: dict[int, Entity]) -> list[str]:
-        events: list[str] = []
-        for member_id in list(self.members):
-            ent = entities.get(member_id)
-            if ent is None or not ent.alive:
-                continue
-            tribute_wood = int(ent.inventory.get("wood", 0) * config.VASSAL_TRIBUTE_RATIO)
-            tribute_stone = int(ent.inventory.get("stone", 0) * config.VASSAL_TRIBUTE_RATIO)
-            tribute_food = int(ent.inventory.get("food", 0) * config.VASSAL_TRIBUTE_RATIO)
-            if tribute_wood > 0 or tribute_stone > 0 or tribute_food > 0:
-                ent.inventory["wood"] = ent.inventory.get("wood", 0) - tribute_wood
-                ent.inventory["stone"] = ent.inventory.get("stone", 0) - tribute_stone
-                ent.inventory["food"] = ent.inventory.get("food", 0) - tribute_food
-                for overlord_member_id in overlord.members:
-                    overlord_ent = entities.get(overlord_member_id)
-                    if overlord_ent and overlord_ent.alive:
-                        overlord_ent.inventory["wood"] = overlord_ent.inventory.get("wood", 0) + tribute_wood
-                        overlord_ent.inventory["stone"] = overlord_ent.inventory.get("stone", 0) + tribute_stone
-                        overlord_ent.inventory["food"] = overlord_ent.inventory.get("food", 0) + tribute_food
-                        break
-                if tribute_wood > 0 or tribute_stone > 0 or tribute_food > 0:
-                    events.append(f"{self.name} pays tribute to {overlord.name}")
-        return events
+        from .diplomacy import diplomacy_manager
+        return diplomacy_manager.tick_diplomacy(self, faction_registry, entities)
 
     def is_enemy(self, entity_id: int, faction_registry: dict[int, Faction]) -> bool:
         """특정 개체가 이 파벌의 적인가? (같은 faction의 멤버면 적이 아님)."""
