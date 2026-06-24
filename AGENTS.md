@@ -26,7 +26,7 @@
 
 **목표**: 유전 알고리즘 + 시장 메커니즘 + 듀얼 브레인 시스템(RuleBasedBrain/SmartBrain)으로 개체들이 스스로 진화하고 문명을 발전시키는 emergent behavior(창발 행동)를 관찰하는 시뮬레이션. **LLM/외부 AI는 영원히 사용하지 않습니다.**
 
-**현재 단계**: Phase 0 (코어 엔진) ✅ / Phase 1 (밸런싱+전투) ✅ / Phase 2 (전투 심화+파벌) ✅ / Phase 3 (SmartBrain) ✅ / Phase 3.1 (이데올로기/계절/건물/이벤트) ✅ / Phase 4 (UI) ✅ / Phase 4.5 (데이터 내보내기) ✅
+**현재 단계**: Phase 0 (코어 엔진) ✅ / Phase 1 (밸런싱+전투) ✅ / Phase 2 (전투 심화+파벌) ✅ / Phase 3 (SmartBrain) ✅ / Phase 3.1 (이데올로기/계절/건물/이벤트) ✅ / Phase 4 (UI) ✅ / Phase 4.5 (데이터 내보내기) ✅ / Phase 5 (기술부채해소+CI) ✅
 
 **Python 3.11+**, 표준 라이브러리 + Rich(TUI) 만으로 동작.
 
@@ -39,21 +39,47 @@ selfgrow/
 ├── 에이전트.md           # 이 파일 — AI 에이전트 규칙
 ├── README.md             # 프로젝트 개요 및 실행 방법
 ├── requirements.txt      # 의존성 목록
+├── .github/workflows/    # GitHub Actions CI
 ├── .gitignore
 └── sim/
     ├── __init__.py       # 패키지 초기화, 주요 클래스 익스포트
-    ├── config.py         # 모든 시뮬레이션 파라미터 (튜너블 상수)
-    ├── genome.py         # 유전자 — 10개 형질 + 돌연변이/교차
-    ├── entity.py         # 개체 — 상태 기계, 행동 실행 (brain.py에 결정 위임)
-    ├── brain.py          # 두뇌 — RuleBasedBrain / SmartBrain 듀얼 시스템
-    ├── knowledge.py      # 지식/기술 트리 — 9개 기술 노드
-    ├── resource.py       # 자원 — 7개 지형 × 5개 자원
-    ├── world.py          # 월드 — 40×30 격자, 공간 질의, 영토
-    ├── market.py         # 시장 — 지정가 주문장, 체결, 가격 지수
-    ├── metrics.py        # 통계 — 지니계수, 분업지수, 시계열
-    ├── engine.py         # 엔진 — 메인 루프, 개체 생명주기 (266줄)
-    ├── visualizer.py     # 사이버펑크 TUI — Rich 기반 실시간 시각화
-    └── main.py           # CLI 진입점 — argparse + 실행 루프
+    ├── config.py         # 모든 시뮬레이션 파라미터 (튜너블 상수) — 311줄
+    ├── genome.py         # 유전자 — 11개 형질 + 돌연변이/교차 — 90줄
+    ├── entity.py         # 개체 — 상태 기계, 행동 실행 — 276줄
+    ├── entity_action.py  # 개체 행동 — 채집/소비/탐험 — 125줄
+    ├── entity_combat.py  # 전투 — 데미지/약탈/동맹 — 144줄
+    ├── entity_craft.py   # 제작 — 레시피/장비 — 43줄
+    ├── entity_reproduce.py # 번식 — 유전자 교차/후손 생성 — 63줄
+    ├── brain.py          # 두뇌 — 듀얼 시스템入口 — 25줄
+    ├── brain_base.py     # Brain 추상 클래스, Experience, Goal — 31줄
+    ├── rule_brain.py     # RuleBasedBrain — 점수 기반 FSM — 158줄
+    ├── smart_brain.py    # SmartBrain — 경험학습+계획+목표+메시징 — 244줄
+    ├── brain_goals.py    # 목표 생성/추적 — 71줄
+    ├── brain_planning.py # 멀티스텝 계획 — 59줄
+    ├── brain_messaging.py # 메시지 송수신 — 176줄
+    ├── messaging.py      # SmartBrain 메시징 — outbox/mailbox 배달 — 20줄
+    ├── knowledge.py      # 지식/기술 트리 — 9개 기술 노드 — 99줄
+    ├── resource.py       # 자원 — 7개 지형 × 5개 자원 — 104줄
+    ├── world.py          # 월드 — 40×30 격자, 공간 질의, 영토 — 208줄
+    ├── market.py         # 시장 — 지정가 주문장, 체결, 가격 지수 — 157줄
+    ├── trade_network.py  # 무역 네트워크 — 파션 간 자원 교환 — 200줄
+    ├── metrics.py        # 통계 — 지니계수, 분업지수, 시계열 — 202줄
+    ├── engine.py         # 엔진 — 메인 루프, 개체 생명주기 — 256줄
+    ├── faction.py        # 파벌 — 결성/영토/전쟁/음집력 — 251줄
+    ├── faction_system.py # 파벌 시스템 — 자동 결성/해체 루프 — 78줄
+    ├── diplomacy.py      # 외교 — 4종 조약, 관계 관리 — 118줄
+    ├── ideology.py       # 이데올로기 — 4종 행동 바이어스 — 76줄
+    ├── cultural.py       # 문화 — 언어/관습/지식 전수 — 131줄
+    ├── season.py         # 계절 — 4계절 25틱 순환 — 39줄
+    ├── events.py         # 랜덤 이벤트 — 6종 이벤트 — 142줄
+    ├── buildings.py      # 건물 — 5종 (저장고/감시탑/벽/대장간/제단)
+    ├── spatial.py        # 공간 인덱싱 — QuadTree — 157줄
+    ├── research.py       # 글로벌 연구 — 기술 포인트 축적 — 61줄
+    ├── experiment.py     # 실험 프레임워크 — 다중 실행 비교 — 162줄
+    ├── exporter.py       # 데이터 내보내기 — CSV/JSON — 171줄
+    ├── visualizer.py     # 사이버펑크 TUI — Rich 기반 실시간 시각화 — 217줄
+    ├── main.py           # CLI 진입점 — argparse + 실행 루프 — 131줄
+    └── ui/               # UI 레이아웃 모듈
 ```
 
 ### 모듈 의존성 그래프
@@ -151,8 +177,9 @@ config.py ── 모든 모듈이 참조 ──┐
 
 ### 5.4 파일 규모 제한
 - 단일 파일은 700줄을 넘기지 않습니다.
-- entity.py(현재 ~640줄)가 한계에 근접함 — 새 기능 추가 시 신규 모듈로 분리하는 것을 우선 고려합니다.
-- engine.py도 300줄 미만 유지, 메인 루프 로직은 engine.py에 두고 세부 로직은 개별 모듈로 위임합니다.
+- 현재 최대: `config.py` 311줄, `faction.py` 251줄, `smart_brain.py` 244줄 — 모두 안전 범위.
+- 새 기능 추가 시 신규 모듈로 분리하는 것을 우선 고려합니다.
+- engine.py는 300줄 미만 유지, 메인 루프 로직은 engine.py에 두고 세부 로직은 개별 모듈로 위임합니다.
 
 ---
 
@@ -206,3 +233,14 @@ python -m sim.main --no-visual --ticks 200 --seed 42
 - 모호한 요청이 들어오면 현재 Phase와 제약 조건을 먼저 확인하고 실행 가능한 범위를 제안합니다.
 - 버그가 의심될 때는 가설을 세우고 entity.py → engine.py → config.py 순으로 추적합니다.
 - "계속 진행" 같은 모호한 명령이 들어오면 마지막 작업 상태를 요약하고 다음 단계 선택지를 제시합니다.
+
+---
+
+## 9. 테스트 현황
+
+- **총 테스트 수**: 292개 (전체 통과)
+- **테스트 파일**: 34개 (`tests/test_*.py`)
+- **커버리지**: 미측정 (pytest-cov 설정 완료, 미실행)
+- **기존 커버**: entity, genome, market, world, knowledge, season, events, buildings, ideology, faction, diplomacy, brain, performance, interactive_map
+- **신규 커버 (Phase 5)**: config, resource, metrics, research, faction_system, diplomacy, entity_action, entity_combat, entity_craft, entity_reproduce, messaging, exporter, experiment
+- **미커버 모듈**: brain_base, brain_goals, brain_planning, brain_messaging, smart_brain, rule_brain
