@@ -34,11 +34,13 @@ class SmartBrain(RuleBasedBrain):
     def __init__(self, rng: random.Random | None = None):
         super().__init__(rng=rng)
         self.experiences: deque[Experience] = deque(maxlen=config.SMART_MEMORY_SIZE)
+        self.experience_ticks: deque[int] = deque(maxlen=config.SMART_MEMORY_SIZE)
         self.goals: list[Goal] = []
         self.current_plan: list[str] = []
         self.outbox: list[BrainMessage] = []
         self._last_action: str = "idle"
         self._last_state_snapshot: dict[str, float] = {}
+        self._current_tick: int = 0
 
     def decide(self, entity, world, market) -> EntityState:
         from .entity import EntityState
@@ -46,6 +48,7 @@ class SmartBrain(RuleBasedBrain):
         if entity.energy <= 0:
             return EntityState.DIE
 
+        self._current_tick = world.tick
         messaging_mod.process_messages(entity, world, self)
         goals_mod.update_goals(entity, self)
 
@@ -58,6 +61,8 @@ class SmartBrain(RuleBasedBrain):
                     self._record_state(entity)
                     self._last_action = next_action
                     return state
+            else:
+                self.feedback(entity, next_action, -1.0)
 
         self.current_plan = []
         best_action = self._plan_and_decide(entity, world, market)
@@ -79,15 +84,18 @@ class SmartBrain(RuleBasedBrain):
             return EntityState.IDLE
 
         current_state = self._make_snapshot(entity)
-        for exp in self.experiences:
+        for exp, tick in zip(self.experiences, self.experience_ticks):
             sim = self._state_similarity(current_state, exp.state_snapshot)
-            if sim > config.SMART_SIMILARITY_THRESHOLD:
+            age = self._current_tick - tick
+            time_weight = config.SMART_MEMORY_DECAY ** age
+            weighted_sim = sim * time_weight
+            if weighted_sim > config.SMART_SIMILARITY_THRESHOLD:
                 state = self._action_name_to_state(exp.action)
                 if state and state in scores:
                     if exp.outcome_score > 0:
-                        scores[state] *= (1.0 + sim * exp.outcome_score * 2.0)
+                        scores[state] *= (1.0 + weighted_sim * exp.outcome_score * config.SMART_LEARNING_RATE * 2.0)
                     else:
-                        scores[state] *= (1.0 - sim * abs(exp.outcome_score) * 0.5)
+                        scores[state] *= (1.0 - weighted_sim * abs(exp.outcome_score) * config.SMART_LEARNING_RATE * 0.5)
 
         for goal in self.goals:
             goal_bonus = goals_mod.goal_action_bonus(goal, entity, world)
@@ -165,6 +173,12 @@ class SmartBrain(RuleBasedBrain):
 
         scores[EntityState.IDLE] = 5.0
 
+        danger = getattr(self, '_danger_level', 0)
+        if danger > 0:
+            scores[EntityState.COMBAT] = scores.get(EntityState.COMBAT, 0) + danger * 15.0
+            scores[EntityState.IDLE] = scores.get(EntityState.IDLE, 0) + danger * 10.0
+            self._danger_level = max(0, danger - 1)
+
     # ── 목표 위임 ──
 
     def _update_goals(self, entity) -> None:
@@ -182,6 +196,10 @@ class SmartBrain(RuleBasedBrain):
     def send_trade_request(self, entity, world, target_id: int,
                            resource: str, quantity: float) -> None:
         messaging_mod.send_trade_request(entity, world, target_id, resource, quantity, self)
+
+    def send_trade_counter(self, entity, world, target_id: int,
+                           resource: str, quantity: float, price: float) -> None:
+        messaging_mod.send_trade_counter(entity, world, target_id, resource, quantity, price, self)
 
     def send_alliance_proposal(self, entity, world, target_id: int) -> None:
         messaging_mod.send_alliance_proposal(entity, world, target_id, self)
@@ -205,6 +223,7 @@ class SmartBrain(RuleBasedBrain):
             outcome_score=outcome_score,
         )
         self.experiences.append(exp)
+        self.experience_ticks.append(self._current_tick)
 
     def _record_state(self, entity) -> None:
         self._last_state_snapshot = self._make_snapshot(entity)
@@ -235,6 +254,17 @@ class SmartBrain(RuleBasedBrain):
             diffs.append(abs(a.get(key, 0) - b.get(key, 0)) / max_val)
         avg_diff = sum(diffs) / len(diffs)
         return max(0.0, 1.0 - avg_diff)
+
+    def _weighted_similarity(self, state: dict, current_tick: int) -> float:
+        total_sim = 0.0
+        total_weight = 0.0
+        for exp, tick in zip(self.experiences, self.experience_ticks):
+            sim = self._state_similarity(state, exp.state_snapshot)
+            age = current_tick - tick
+            weight = config.SMART_MEMORY_DECAY ** age
+            total_sim += sim * weight
+            total_weight += weight
+        return total_sim / total_weight if total_weight > 0 else 0.0
 
     # ── 유틸리티 ──
 

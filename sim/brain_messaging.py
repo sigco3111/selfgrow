@@ -24,6 +24,8 @@ def process_messages(entity: Entity, world: World, brain) -> None:
             _handle_trade_offer(entity, world, msg, brain)
         elif msg.msg_type == "trade_request":
             _handle_trade_request(entity, world, msg, brain)
+        elif msg.msg_type == "trade_counter":
+            _handle_trade_counter(entity, world, msg, brain)
         elif msg.msg_type == "alliance_proposal":
             _handle_alliance_proposal(entity, world, msg, brain)
         elif msg.msg_type == "alliance_accepted":
@@ -66,6 +68,22 @@ def _handle_trade_request(entity: Entity, world: World, msg: BrainMessage, brain
         ))
 
 
+def _handle_trade_counter(entity: Entity, world: World, msg: BrainMessage, brain) -> None:
+    resource = msg.data.get("resource", "")
+    quantity = msg.data.get("quantity", 0)
+    counter_price = msg.data.get("price", 0)
+    if not resource or quantity <= 0:
+        return
+    current = entity.inventory.get(resource, 0)
+    if current >= quantity:
+        brain._send(entity, BrainMessage(
+            msg_type="trade_accept",
+            sender_id=entity.eid,
+            target_id=msg.sender_id,
+            data={"resource": resource, "quantity": quantity, "price": counter_price},
+        ))
+
+
 def _handle_alliance_proposal(entity: Entity, world: World, msg: BrainMessage, brain) -> None:
     sender_ent = world.entities.get(msg.sender_id)
     if not sender_ent or not sender_ent.alive:
@@ -89,15 +107,14 @@ def _handle_alliance_accepted(entity: Entity, world: World, msg: BrainMessage, b
     sender_ent = world.entities.get(msg.sender_id)
     if not sender_ent or not sender_ent.alive:
         return
-    if entity.faction_id < 0 or sender_ent.faction_id < 0:
-        return
-    if entity.faction_id == sender_ent.faction_id:
-        return
-    from .faction import Faction as Fct
-    my_faction = world.faction_registry.get(entity.faction_id)
-    target_faction = world.faction_registry.get(sender_ent.faction_id)
-    if my_faction and target_faction:
-        my_faction.propose_treaty(target_faction, "ALLIANCE")
+    if entity.faction_id >= 0 and sender_ent.faction_id >= 0:
+        if entity.faction_id == sender_ent.faction_id:
+            return
+        from .faction import Faction as Fct
+        my_faction = world.faction_registry.get(entity.faction_id)
+        target_faction = world.faction_registry.get(sender_ent.faction_id)
+        if my_faction and target_faction:
+            my_faction.propose_treaty(target_faction, "ALLIANCE")
 
 
 def _handle_treaty_proposal(entity: Entity, world: World, msg: BrainMessage, brain) -> None:
@@ -107,23 +124,23 @@ def _handle_treaty_proposal(entity: Entity, world: World, msg: BrainMessage, bra
     sender_ent = world.entities.get(msg.sender_id)
     if not sender_ent or not sender_ent.alive:
         return
-    if entity.faction_id < 0 or sender_ent.faction_id < 0:
-        return
-    if entity.faction_id == sender_ent.faction_id:
-        return
+    if entity.faction_id >= 0 and sender_ent.faction_id >= 0:
+        if entity.faction_id == sender_ent.faction_id:
+            return
     acceptance = entity.genome.sociability * 0.5
     if brain._rng.random() < acceptance:
-        from .faction import Faction as Fct
-        my_faction = world.faction_registry.get(entity.faction_id)
-        target_faction = world.faction_registry.get(sender_ent.faction_id)
-        if my_faction and target_faction:
-            my_faction.propose_treaty(target_faction, treaty_type)
-            brain._send(entity, BrainMessage(
-                msg_type="treaty_accepted",
-                sender_id=entity.eid,
-                target_id=msg.sender_id,
-                data={"treaty": treaty_type},
-            ))
+        if entity.faction_id >= 0 and sender_ent.faction_id >= 0:
+            from .faction import Faction as Fct
+            my_faction = world.faction_registry.get(entity.faction_id)
+            target_faction = world.faction_registry.get(sender_ent.faction_id)
+            if my_faction and target_faction:
+                my_faction.propose_treaty(target_faction, treaty_type)
+        brain._send(entity, BrainMessage(
+            msg_type="treaty_accepted",
+            sender_id=entity.eid,
+            target_id=msg.sender_id,
+            data={"treaty": treaty_type},
+        ))
 
 
 def _handle_warning(entity: Entity, msg: BrainMessage, brain) -> None:
@@ -131,7 +148,10 @@ def _handle_warning(entity: Entity, msg: BrainMessage, brain) -> None:
     danger_y = msg.data.get("y", entity.y)
     dist = abs(entity.x - danger_x) + abs(entity.y - danger_y)
     if dist <= 2:
-        pass
+        if not hasattr(brain, '_danger_level'):
+            brain._danger_level = 0
+        brain._danger_level = min(brain._danger_level + 1, 5)
+        brain._danger_origin = (danger_x, danger_y)
 
 
 def send_trade_offer(entity: Entity, world: World, target_id: int,
@@ -151,6 +171,16 @@ def send_trade_request(entity: Entity, world: World, target_id: int,
         sender_id=entity.eid,
         target_id=target_id,
         data={"resource": resource, "quantity": quantity},
+    ))
+
+
+def send_trade_counter(entity: Entity, world: World, target_id: int,
+                       resource: str, quantity: float, price: float, brain) -> None:
+    brain._send(entity, BrainMessage(
+        msg_type="trade_counter",
+        sender_id=entity.eid,
+        target_id=target_id,
+        data={"resource": resource, "quantity": quantity, "price": price},
     ))
 
 

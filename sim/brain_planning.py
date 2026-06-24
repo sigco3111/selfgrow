@@ -14,30 +14,43 @@ if TYPE_CHECKING:
 
 def try_multistep_plan(entity: Entity, world: World, market: Market,
                        scores: dict, brain) -> None:
-    """2-스텝 계획 시도."""
     from .entity import EntityState
 
     candidates = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
     if not candidates:
         return
 
-    best_seq_score = 0.0
-    best_seq_actions: tuple = (EntityState.IDLE, EntityState.IDLE)
+    beam_width = 2
+    depth = config.SMART_PLANNING_DEPTH
 
-    for state_a, score_a in candidates:
-        for state_b, _ in candidates:
-            if state_b == state_a:
-                continue
-            seq_score = score_a + scores.get(state_b, 0) * config.SMART_PLANNING_DISCOUNT
-            if seq_score > best_seq_score:
-                best_seq_score = seq_score
-                best_seq_actions = (state_a, state_b)
+    beams: list[tuple[list[str], float]] = [([], 0.0)]
+    for state, score in candidates:
+        beams.append(([state.name.lower()], score))
 
-    if best_seq_score > scores.get(best_seq_actions[0], 0) * 1.3:
-        brain.current_plan = [
-            best_seq_actions[0].name.lower(),
-            best_seq_actions[1].name.lower(),
-        ]
+    for step in range(1, depth):
+        new_beams: list[tuple[list[str], float]] = []
+        for path, path_score in beams:
+            last_action = path[-1] if path else None
+            for state, score in candidates:
+                if state.name.lower() == last_action:
+                    continue
+                discount = config.SMART_PLANNING_DISCOUNT ** step
+                new_score = path_score + score * discount
+                new_beams.append((path + [state.name.lower()], new_score))
+        new_beams.sort(key=lambda x: x[1], reverse=True)
+        beams = new_beams[:beam_width]
+
+    if not beams:
+        return
+
+    best_path, best_score = beams[0]
+    if not best_path:
+        return
+
+    first_action = best_path[0]
+    first_score = scores.get(EntityState[first_action.upper()], 0)
+    if best_score > first_score * 1.3 and len(best_path) >= 2:
+        brain.current_plan = best_path
 
 
 def build_plan_from_action(entity: Entity, world: World, market: Market,
