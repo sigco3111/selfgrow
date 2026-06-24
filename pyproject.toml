@@ -16,3 +16,18 @@ Repository = "https://github.com/sigco3111/selfgrow"
 
 [tool.setuptools.packages.find]
 include = ["sim*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "performance: performance benchmark tests",
+]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["sim"]
+omit = ["tests/*", "sim/ui/*"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
