@@ -89,3 +89,21 @@ class TestSeasonProgress:
 
     def test_new_season_starts_at_0(self):
         assert season_progress(25) == 0.0
+
+
+class TestSeasonAdditional:
+    def test_spring_speed_default(self):
+        eff = get_season_effects(Season.SPRING)
+        assert eff.speed_mult == 1.0
+
+    def test_summer_gather_default(self):
+        eff = get_season_effects(Season.SUMMER)
+        assert eff.gather_mult == 1.0
+
+    def test_autumn_energy_default(self):
+        eff = get_season_effects(Season.AUTUMN)
+        assert eff.energy_mult == 1.0
+
+    def test_autumn_speed_default(self):
+        eff = get_season_effects(Season.AUTUMN)
+        assert eff.speed_mult == 1.0
