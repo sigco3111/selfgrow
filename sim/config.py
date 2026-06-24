@@ -19,18 +19,6 @@ def apply_overrides(overrides: dict[str, object]) -> None:
             raise KeyError(f"Unknown or non-overridable config key: {key}")
 
 
-def create_rng(seed: int, subsystem: str) -> random.Random:
-    """서브시스템별 독립된 RNG 인스턴스 생성.
-    
-    각 서브시스템(engine, world, entity, brain, market, faction, events 등)은
-    고유한 시드 공간을 가지도록 subsystem 문자열을 해시하여 결합.
-    """
-    import hashlib
-    combined = f"{seed}:{subsystem}"
-    derived_seed = int(hashlib.sha256(combined.encode()).hexdigest()[:8], 16)
-    return random.Random(derived_seed)
-
-
 # ──────────────────────────────────────────────
 # 월드
 # ──────────────────────────────────────────────
