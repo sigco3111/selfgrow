@@ -89,17 +89,3 @@ def process_factions(
                     if target_faction:
                         faction.declare_war(target_faction.faction_id)
                         target_faction.declare_war(faction.faction_id)
-
-    # 5. 자동 전쟁 선포: 같은 타일에서 다른 파벌 멤버 발견 시
-    for faction in list(faction_reg.values()):
-        for eid in list(faction.members):
-            ent = entities.get(eid)
-            if not ent or not ent.alive:
-                continue
-            for other_eid, other_ent in world.entity_at(ent.x, ent.y):
-                if (other_ent.alive and other_ent.faction_id >= 0
-                        and other_ent.faction_id != faction.faction_id):
-                    target_faction = faction_reg.get(other_ent.faction_id)
-                    if target_faction:
-                        faction.declare_war(target_faction.faction_id)
-                        target_faction.declare_war(faction.faction_id)
