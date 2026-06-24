@@ -87,6 +87,7 @@ class SimulationEngine:
 
             eid = self.world.spawn_entity(entity)
             entity.eid = eid
+            entity.name = f"E{eid:04d}"
 
     # ──────────────────────────────────────────
     # 메인 루프

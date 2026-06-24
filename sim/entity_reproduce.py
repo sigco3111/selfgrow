@@ -56,6 +56,7 @@ def do_reproduce(entity: Entity, world: World) -> list[dict]:
 
     child_id = world.spawn_entity(child)
     child.eid = child_id
+    child.name = f"E{child_id:04d}"
     entity.children_count += 1
     entity.reproduction_cooldown = config.REPRODUCTION_COOLDOWN
     entity.energy -= config.ENERGY_COST["reproduce"]
