@@ -79,6 +79,11 @@ def main() -> None:
         "--experiment", type=str, default=None,
         help="실험 설정 JSON 파일 경로 (지정 시 다중 실행 비교)"
     )
+    parser.add_argument(
+        "--layout", type=str, default="default",
+        choices=["default", "chart", "faction", "entity", "tech"],
+        help="레이아웃 모드 (default/chart/faction/entity/tech, 기본: default)"
+    )
 
     args = parser.parse_args()
     headless = args.no_visual
@@ -104,10 +109,10 @@ def main() -> None:
     if headless:
         print("헤드리스 모드로 실행 중...")
         run_headless(engine, args.ticks)
-        visualizer = TerminalVisualizer(engine)
+        visualizer = TerminalVisualizer(engine, layout_mode=args.layout)
         visualizer.render_final_summary(engine.metrics)
     else:
-        visualizer = TerminalVisualizer(engine)
+        visualizer = TerminalVisualizer(engine, layout_mode=args.layout)
         engine.running = True
         extinction = False
 
