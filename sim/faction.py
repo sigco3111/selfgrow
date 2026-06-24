@@ -90,13 +90,22 @@ class Faction:
         avg_loyalty = total_loyalty / len(alive_members)
         survival_rate = len(alive_members) / max(1, len(self.members))
 
-        # 동일 이데올로기 페어 보너스 계산
-        ideology_bonus = 0.0
-        pair_count = 0
-        for i, e1 in enumerate(alive_members):
-            for e2 in alive_members[i + 1:]:
-                ideology_bonus += same_ideology_bonus(e1, e2)
-                pair_count += 1
+        # 동일 이데올로기 페어 보너스 계산 — O(n) 카운트 + 조합 공식
+        n = len(alive_members)
+        pair_count = n * (n - 1) // 2
+        
+        ideology_counts: dict[str, int] = {}
+        for e in alive_members:
+            if e.ideology != "none":
+                ideology_counts[e.ideology] = ideology_counts.get(e.ideology, 0) + 1
+        
+        total_non_none = sum(ideology_counts.values())
+        non_none_pairs = total_non_none * (total_non_none - 1) // 2
+        same_pairs = sum(cnt * (cnt - 1) // 2 for cnt in ideology_counts.values())
+        diff_pairs = non_none_pairs - same_pairs
+        
+        ideology_bonus = (same_pairs * config.IDEOLOGY_SAME_BONUS
+                          + diff_pairs * (-config.IDEOLOGY_DIFFERENT_PENALTY))
 
         avg_ideology_bonus = ideology_bonus / max(1, pair_count) if pair_count > 0 else 0.0
 
