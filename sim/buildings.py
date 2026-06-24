@@ -45,11 +45,11 @@ def get_building_effects(entity: "Entity") -> dict[str, float]:
     return combined
 
 
-def destroy_random_building(entity: "Entity") -> str | None:
+def destroy_random_building(entity: "Entity", rng: random.Random) -> str | None:
     if not entity.buildings:
         return None
-    if random.random() < config.BUILDING_DESTROY_CHANCE:
-        removed = random.choice(entity.buildings)
+    if rng.random() < config.BUILDING_DESTROY_CHANCE:
+        removed = rng.choice(entity.buildings)
         entity.buildings.remove(removed)
         return removed
     return None

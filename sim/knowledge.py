@@ -103,16 +103,17 @@ class KnowledgeBook:
         """기술 상실 (문화적 진화에서 퇴보 시나리오)."""
         self.known.discard(tech_name)
 
-    def share(self, other: KnowledgeBook, sociability: float) -> list[str]:
+    def share(self, other: KnowledgeBook, sociability: float,
+              rng: random.Random | None = None) -> list[str]:
         """사회성에 비례해 보유 지식을 상대에게 전수. 전수된 목록 반환."""
+        rng = rng or random
         transferred = []
-        if random.random() > sociability:
+        if rng.random() > sociability:
             return transferred
-        # 사회성 높을수록 더 많은 지식 공유
         share_count = max(1, int(len(self.known) * sociability))
         candidates = [t for t in self.known if not other.know(t)]
         if candidates:
-            selected = random.sample(candidates, min(share_count, len(candidates)))
+            selected = rng.sample(candidates, min(share_count, len(candidates)))
             for tech in selected:
                 other.learn(tech)
                 transferred.append(tech)
