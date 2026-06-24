@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "selfgrow"
+version = "0.4.0"
+description = "Self-growing civilization simulation with genetic algorithm, market economy, and dual-brain system"
+requires-python = ">=3.11"
+dependencies = [
+    "rich>=13.0",
+]
+
+[project.urls]
+Repository = "https://github.com/sigco3111/selfgrow"
+
+[tool.setuptools.packages.find]
+include = ["sim*"]
