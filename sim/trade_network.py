@@ -39,9 +39,9 @@ class TradeAgreement:
     duration: int = 200  # 협정 지속 틱
     tax_discount: float = 0.3  # 거래 수수료 할인율
     
-    @property
-    def is_active(self) -> bool:
-        return True  # 단순화: 항상 활성
+    def is_expired(self, current_tick: int) -> bool:
+        """협정 만료 여부 확인."""
+        return (current_tick - self.created_tick) >= self.duration
     
     @property
     def key(self) -> tuple[int, int]:
