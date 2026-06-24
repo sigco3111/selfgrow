@@ -1,9 +1,4 @@
-# Phase 0: 규칙 기반 시뮬레이션
+# 규칙 기반 시뮬레이션
 # Python 3.11+ 표준 라이브러리 + Rich (사이버펑크 TUI)
 
 rich>=13.0
-
-# Phase 1+: LLM 통합 시 추가 예정
-# openai>=1.0
-# anthropic>=0.30
-# httpx>=0.27
