@@ -20,6 +20,7 @@ from .entity import Entity
 from .knowledge import TechnologyTree
 from .market import Market
 from .metrics import MetricsCollector
+from .trade_network import get_trade_network
 from .world import World
 
 
@@ -40,6 +41,8 @@ class SimulationEngine:
         self._rng = config.create_rng(self._seed, "engine")
         self.world = World(seed=seed, rng=config.create_rng(self._seed, "world"))
         self.market = Market(rng=config.create_rng(self._seed, "market"))
+        self._event_rng = config.create_rng(self._seed, "events")
+        self.trade_network = get_trade_network()
         self.tech_tree = TechnologyTree()
         self.metrics = MetricsCollector()
 
@@ -132,8 +135,7 @@ class SimulationEngine:
         self.market.tick_update()
 
         # 3. 랜덤 이벤트 처리
-        event_rng = config.create_rng(self._seed, "events")
-        event_logs = evt.process_events(self.world, rng=event_rng)
+        event_logs = evt.process_events(self.world, rng=self._event_rng)
         for log in event_logs:
             log["tick"] = self.world.tick
             self._log_event(log)
@@ -234,6 +236,14 @@ class SimulationEngine:
 
         # 7. 파벌 생명주기
         self._process_factions()
+
+        # 7.5. 무역 네트워크 처리
+        trade_events = self.trade_network.process_trades(
+            self.world, self.market, self._rng
+        )
+        for ev in trade_events:
+            ev["tick"] = self.world.tick
+            self._log_event(ev)
 
         # 8. 문화적 진화: 인접 개체 간 지식 전수
         self._cultural_transfer()
