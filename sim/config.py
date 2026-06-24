@@ -298,9 +298,11 @@ COMBAT_RETREAT_THRESHOLD = 0.25       # 에너지 비율 이하면 후퇴
 # ──────────────────────────────────────────────
 SMART_BRAIN_RATIO = _overridable("SMART_BRAIN_RATIO", 0.25)          # 전체 개체 중 SmartBrain 비율 (0.25 = 25%)
 SMART_MEMORY_SIZE = 50            # 각 SmartBrain이 기억하는 최근 경험 수
+SMART_MEMORY_DECAY = 0.95         # 경험 시간 감쇠율 (0~1, 작을수록 빠르게 감쇠)
 SMART_SIMILARITY_THRESHOLD = 0.7  # 경험 참조를 위한 상태 유사도 임계값
 SMART_PLANNING_RATE = 0.3         # 멀티스텝 계획 시도 확률 (매 결정마다)
 SMART_PLANNING_DISCOUNT = 0.6     # 미래 액션 점수 할인율 (0~1, 높을수록 미래 중시)
+SMART_PLANNING_DEPTH = 3          # 멀티스텝 계획 깊이 (기본값 3)
 SMART_LEARNING_RATE = 0.1         # 경험 보정의 학습률 (너무 높으면 불안정)
 SMART_TRADE_THRESHOLD = 3          # SmartBrain 거래 제안 수락 임계값
 SMART_SURPLUS_THRESHOLDS: dict[str, int] = {"food": 5, "default": 3}
