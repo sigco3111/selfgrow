@@ -19,6 +19,8 @@ class EventType(Enum):
     PEST_INFESTATION = "pest_infestation"
     ANIMAL_MIGRATION = "animal_migration"
     EARTHQUAKE = "earthquake"
+    FESTIVAL = "festival"
+    EPIDEMIC = "epidemic"
 
 
 EVENT_NAMES_KR: dict[EventType, str] = {
@@ -28,6 +30,8 @@ EVENT_NAMES_KR: dict[EventType, str] = {
     EventType.PEST_INFESTATION: "역병",
     EventType.ANIMAL_MIGRATION: "동물 대이동",
     EventType.EARTHQUAKE: "지진",
+    EventType.FESTIVAL: "축제",
+    EventType.EPIDEMIC: "전염병",
 }
 
 
@@ -68,9 +72,10 @@ def in_event_area(ev: WorldEvent, x: int, y: int) -> bool:
     return dist <= ev.radius
 
 
-def apply_event_tick(world: World, ev: WorldEvent) -> list[dict]:
+def apply_event_tick(world: World, ev: WorldEvent, rng: random.Random | None = None) -> list[dict]:
     logs: list[dict] = []
     et = ev.event_type
+    _rng = rng or random
 
     for row in world.tiles:
         for tile in row:
@@ -132,6 +137,23 @@ def apply_event_tick(world: World, ev: WorldEvent) -> list[dict]:
                     if ent.alive and (ent.x, ent.y) == (tile.x, tile.y):
                         ent.energy -= 5.0 * ev.severity
 
+            elif et == EventType.FESTIVAL:
+                for eid, ent in world.entities.items():
+                    if ent.alive and (ent.x, ent.y) == (tile.x, tile.y):
+                        ent.energy += 10.0 * ev.severity
+
+            elif et == EventType.EPIDEMIC:
+                for eid, ent in world.entities.items():
+                    if ent.alive and (ent.x, ent.y) == (tile.x, tile.y):
+                        ent.energy -= 5.0 * ev.severity
+                        if _rng.random() < 0.05 * ev.severity:
+                            ent.alive = False
+                            logs.append({
+                                "type": "event_death",
+                                "entity_name": ent.name,
+                                "data": {"cause": "epidemic"},
+                            })
+
     return logs
 
 
@@ -142,7 +164,7 @@ def process_events(world: World, rng: random.Random | None = None) -> list[dict]
     remaining: list[WorldEvent] = []
 
     for ev in active:
-        logs.extend(apply_event_tick(world, ev))
+        logs.extend(apply_event_tick(world, ev, rng))
         ev.remaining -= 1
         if ev.remaining > 0:
             remaining.append(ev)
