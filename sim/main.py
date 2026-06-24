@@ -84,6 +84,14 @@ def main() -> None:
         choices=["default", "chart", "faction", "entity", "tech"],
         help="레이아웃 모드 (default/chart/faction/entity/tech, 기본: default)"
     )
+    parser.add_argument(
+        "--save", type=str, default=None,
+        help="시뮬레이션 상태 저장 경로 (JSON 파일)"
+    )
+    parser.add_argument(
+        "--load", type=str, default=None,
+        help="시뮬레이션 상태 로드 경로 (JSON 파일)"
+    )
 
     args = parser.parse_args()
     headless = args.no_visual
@@ -94,17 +102,26 @@ def main() -> None:
         print(report)
         return
 
+    # ── 상태 로드 ──
+    if args.load:
+        from .savefile import load_game
+        engine = load_game(args.load)
+        loaded_tick = engine.world.tick
+        console.print(f"  [cp.green]✓ 저장 파일 로드:[/] {args.load} (틱 {loaded_tick})")
+    else:
+        loaded_tick = 0
+        engine = SimulationEngine(seed=args.seed)
+
     console.print()
-    console.rule("[cp.magenta]\u26a1 자가발전 문명 [cp.cyan]Phase 0[/][/]")
+    console.rule("[cp.magenta]\u26a1 자가발전 문명 [cp.cyan]Phase 5[/][/]")
     console.print()
     console.print(f"  [cp.dim]월드:[/]  {config.WORLD_WIDTH}\u00d7{config.WORLD_HEIGHT}")
-    console.print(f"  [cp.dim]개체:[/] {config.INITIAL_ENTITY_COUNT}")
+    console.print(f"  [cp.dim]개체:[/] {len([e for e in engine.world.entities.values() if e.alive])}")
     console.print(f"  [cp.dim]최대 틱:[/] {args.ticks}")
-    console.print(f"  [cp.dim]시드:[/]     {args.seed or config.SEED}")
+    console.print(f"  [cp.dim]시드:[/]     {engine._seed}")
     console.print()
 
     _start = time.time()
-    engine = SimulationEngine(seed=args.seed)
 
     if headless:
         print("헤드리스 모드로 실행 중...")
@@ -152,6 +169,11 @@ def main() -> None:
     if args.export:
         export_all(engine, args.export, fmt=args.export_format)
         print(f"\n결과 내보내기 완료: {os.path.abspath(args.export)}/")
+
+    if args.save:
+        from .savefile import save_game
+        save_game(engine, args.save)
+        print(f"상태 저장 완료: {os.path.abspath(args.save)}")
 
 
 if __name__ == "__main__":
