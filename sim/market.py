@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import random
 from collections import deque
 from dataclasses import dataclass, field
@@ -76,13 +77,13 @@ class Market:
         # 잔여 수량이 있으면 주문장에 추가
         if order.quantity > 0.01:
             if is_buy:
-                self.buy_orders.append(order)
-                # 가격 내림차순 정렬
-                self.buy_orders.sort(key=lambda o: o.price, reverse=True)
+                idx = bisect.bisect_left(self.buy_orders, -order.price,
+                                         key=lambda o: -o.price)
+                self.buy_orders.insert(idx, order)
             else:
-                self.sell_orders.append(order)
-                # 가격 오름차순 정렬
-                self.sell_orders.sort(key=lambda o: o.price)
+                idx = bisect.bisect_left(self.sell_orders, order.price,
+                                         key=lambda o: o.price)
+                self.sell_orders.insert(idx, order)
 
         return order
 
