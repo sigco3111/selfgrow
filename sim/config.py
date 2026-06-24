@@ -212,6 +212,18 @@ TECH_TREE: list[TechDef] = [
     # ── Tier 4 (선행 2+개, 비용 140) ──
     TechDef("alchemy", "연금술 - 금 가치 3배, 금 거래 보너스, 금 장식 효과 2배",
             ["metallurgy", "currency"], 140, {"gold_value_mult": 3.0, "trade_gold_bonus": 0.3, "gold_ornament_boost": True}),
+
+    # ── Tier 5 (선행 3+개, 비용 180~200) ──
+    TechDef("printing", "인쇄술 - 지식 전파 속도 +50%, 문화 전수 범위 +1",
+            ["currency", "architecture"], 180, {"knowledge_spread_mult": 1.5, "culture_range": 1}),
+    TechDef("gunpowder", "화약 - 공격 +10, 원거리 전투 가능",
+            ["metallurgy", "alchemy"], 200, {"attack": 10.0, "ranged_combat": True}),
+    TechDef("navigation", "항해술 - 무역 효율 +40%, 탐험 범위 +2",
+            ["sailing", "currency"], 180, {"trade_efficiency": 0.4, "explore_range": 2}),
+    TechDef("democracy", "민주주의 - 파벌 결속 +0.3, 독재 불가",
+            ["bureaucracy"], 180, {"faction_cohesion": 0.3, "no_dictatorship": True}),
+    TechDef("philosophy", "철학 - 이데올로기 전파 +30%, 학습 속도 +20%",
+            ["printing"], 200, {"ideology_spread": 0.3, "learning_speed": 0.2}),
 ]
 
 # 기술 효과 Lookup 캐시 (O(1) 조회 — get_combined_effects() 최적화)
@@ -262,6 +274,14 @@ IDEOLOGIES: dict[str, dict] = {
         "traits": {"sociability": 0.2, "loyalty": 0.1},
         "action_bias": {"trade": 1.4},
     },
+    "environmentalism": {
+        "traits": {"curiosity": 0.3, "innovation_rate": -0.2},
+        "action_bias": {"gather": 1.3, "explore": 1.2, "craft": 0.8, "combat": 0.7},
+    },
+    "technocracy": {
+        "traits": {"innovation_rate": 0.4, "industry": 0.2},
+        "action_bias": {"craft": 1.4, "gather": 0.7, "trade": 1.2},
+    },
 }
 IDEOLOGY_FORMATION_TICKS = 30
 IDEOLOGY_TRANSFER_RADIUS = 2
@@ -269,6 +289,14 @@ IDEOLOGY_CONVERSION_CHANCE = 0.05
 IDEOLOGY_SAME_BONUS = 0.15
 IDEOLOGY_DIFFERENT_PENALTY = 0.1
 
+
+# ──────────────────────────────────────────────
+# 화폐 시스템
+# ──────────────────────────────────────────────
+CURRENCY_SHELL_GATHER_RATE = 0.1        # 채집 시 조개껍질 획득 확률
+CURRENCY_COIN_TRADE_BONUS = 0.2         # 금속 화폐 거래 보너스
+CURRENCY_SHELL_TO_COIN_THRESHOLD = 100  # 조개 → 금속 화폐 전환 임계값
+CURRENCY_ACTIVATION_TECH = "currency"   # 화폐 활성화 필요 기술
 
 # ──────────────────────────────────────────────
 # 전투 강화
